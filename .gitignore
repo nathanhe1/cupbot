@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+journal/
+KILL
+config/market_map.json
+.pytest_cache/

@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy to config/market_map.json. Keys are the Cup's market ids (from `python -m cupbot live` output or the API). d_sign: +1 if YES means the Democrat wins / Democrats control, -1 if YES means the Republican. kind: race | chamber | combo. race_id must match data/races_2026.json (or SENATE_D, HOUSE_D, COMBO_DD/DR/RD/RR for chamber and combo markets). invert: true if the anchor venue's YES is the opposite outcome. Tickers and token ids below are placeholders.",
+  "CUP-MARKET-ID-NC-SENATE": {
+    "kind": "race", "race_id": "SEN-NC", "d_sign": 1,
+    "kalshi": {"ticker": "KALSHI-TICKER-HERE", "invert": false},
+    "polymarket": {"token_id": "POLYMARKET-YES-TOKEN-ID-HERE", "invert": false}
+  },
+  "CUP-MARKET-ID-SENATE-CONTROL": {
+    "kind": "chamber", "race_id": "SENATE_D", "d_sign": 1,
+    "kalshi": {"ticker": "KALSHI-TICKER-HERE", "invert": false}
+  },
+  "CUP-MARKET-ID-BOP-DD": {
+    "kind": "combo", "race_id": "COMBO_DD", "d_sign": 1, "group": "BOP"
+  }
+}

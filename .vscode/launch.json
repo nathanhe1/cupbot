@@ -1,0 +1,10 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {"name": "Paper trade (simulated contest)", "type": "debugpy", "request": "launch", "module": "cupbot", "args": ["paper", "--seed", "1"], "cwd": "${workspaceFolder}"},
+    {"name": "Backtest 40 contests", "type": "debugpy", "request": "launch", "module": "cupbot", "args": ["sim", "--runs", "40", "--baseline"], "cwd": "${workspaceFolder}"},
+    {"name": "Stress sweep", "type": "debugpy", "request": "launch", "module": "cupbot", "args": ["sim", "--runs", "30", "--sweep"], "cwd": "${workspaceFolder}"},
+    {"name": "Race model", "type": "debugpy", "request": "launch", "module": "cupbot", "args": ["model"], "cwd": "${workspaceFolder}"},
+    {"name": "Live DRY RUN", "type": "debugpy", "request": "launch", "module": "cupbot", "args": ["live"], "cwd": "${workspaceFolder}"}
+  ]
+}

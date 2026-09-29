@@ -1,0 +1,111 @@
+# cupbot: a Predictions Cup trading bot
+
+A trading bot for the Susquehanna Predictions Cup (2026 US midterms, trading Oct 1 noon ET to Nov 4 noon ET).
+It follows the project's Game Plan and Edge Playbook: a rule-based engine with hard risk limits on the order path,
+a correlated Monte Carlo race model, Kalshi and Polymarket as price anchors, Claude only as a capped news
+analyst, an election-night live results model, and a final-week sizer aimed at finishing top three.
+
+**Status:** the engine, risk manager, simulator, paper trading and tests work today on this Mac with no installs.
+The live platform client is a skeleton until the API docs are read (see "Before Oct 1"). **Nothing sends a real
+order unless `venue.live_trading_enabled` is `true` in the config file AND you pass `--live`.**
+
+## Quick start
+
+```bash
+cd ~/Trading
+python3 -m unittest discover -s tests -t .      # 42 tests, ~10 s
+python3 -m cupbot model                          # race model probabilities from data/races_2026.json
+python3 -m cupbot paper --seed 1                 # paper-trade one simulated contest, tick by tick
+python3 -m cupbot sim --runs 40 --baseline       # backtest 40 simulated contests vs doing nothing
+python3 -m cupbot sim --runs 30 --sweep          # same, under harder / different assumptions
+```
+
+In VS Code: open the `Trading` folder, then use Run and Debug (the configurations in `.vscode/launch.json`)
+or the Testing panel (unittest is preconfigured).
+
+The core needs only the Python standard library (works on the macOS system Python 3.9). For live trading
+and the Claude analyst install Python 3.12 (`brew install python@3.12`), then:
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env        # then fill in the keys
+```
+
+## What you need to supply
+
+| Item | Where | Needed for |
+|---|---|---|
+| Predictions Cup API key (read + trade scopes) | `.env` → `SUPERMARKET_API_KEY` | `whoami`, `live`, `measure-mm` |
+| Tournament id, rate limits, price format | `config/default.json` → `venue` | live |
+| Real endpoint paths and field names | `config/default.json` → `venue.paths`, and the `_parse_*` helpers in `cupbot/exchange/supermarket.py` | live |
+| Cup market ids mapped to races and to Kalshi tickers / Polymarket token ids | `config/market_map.json` (copy the example) | live, anchors |
+| Current race means (polling averages / forecasts) | `data/races_2026.json` (values there are placeholders) | model |
+| Anthropic API key | `.env` → `ANTHROPIC_API_KEY`, then `analyst.enabled: true` | news analyst (optional) |
+| Kalshi API key (optional) | `.env` → `KALSHI_API_KEY` | Kalshi websocket; REST polling works without it |
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `python3 -m cupbot whoami` | Read-only check that the API key works |
+| `python3 -m cupbot live` | Runs against the real platform in **dry run**: journals the orders it would send |
+| `python3 -m cupbot live --live` | Sends real orders, only if the config also allows it |
+| `python3 -m cupbot measure-mm --minutes 120` then `mm-report` | Week-one measurement of how fast the sponsor's market maker reprices after Kalshi/Polymarket move |
+| `python3 -m cupbot kill` / `unkill` | Creates / removes `KILL`. With it present the engine cancels everything and places nothing |
+| `python3 -m cupbot cancel-all` | Standalone cancel of every resting order |
+
+## How it works
+
+```
+Kalshi / Polymarket ──(websocket or poll)──▶ AnchorBook ──┐ on change: poke engine
+data/races_2026.json ──▶ RaceModel (correlated MC) ───────┤
+Claude analyst ──▶ Signal (capped Δp, sources, decays) ───┤
+election-night results ──▶ LiveResultsModel ──────────────┤
+                                                           ▼
+Cup books ──▶ Engine.step: FairValue ──▶ Strategy ──▶ RiskManager ──▶ Exchange ──▶ Journal (SQLite, background thread)
+```
+
+- **Fair value** (`fairvalue.py`): each source (model, anchor, Cup mid, live results) is blended in log-odds with
+  inverse-variance weights. Chamber and combo markets are priced from the race fair values through the correlated
+  model, so they stay consistent with the races. News shifts are clamped to ±4 points per item and ±10 per market.
+- **Strategy** (`strategy.py`): buys when the ask is below fair by more than a threshold, sells when the bid is
+  above; limit prices stop the sweep before the edge is gone; fractional Kelly sizing with per-market and
+  per-order caps; smaller size on the first tick after a big fair-value jump; exits; election-night capital
+  recycling (sell near-certain winners when there is a better use for the cash); arbitrage when mutually
+  exclusive combo markets don't sum to 1.
+- **Risk** (`risk.py`): kill switch, per-order / per-market / gross / net-Democratic-direction caps, orders per
+  minute, price sanity band, stale-book check, and a halt after a large 24-hour drawdown. Orders that only reduce a
+  position are always allowed (except under the kill switch).
+- **Tournament sizer** (`tournament.py`): in the final week and on election night it scales position sizes to
+  maximise P(final balance ≥ target), using the model's correlated scenarios. Set `tournament.target_multiple`
+  from the leaderboard in late October.
+- **Election night** (`election_night.py`): for reporting races, the counted margin corrected for each state's
+  counting-order "mirage"; for unreported races, the pre-close market-implied margin shifted by the swing seen
+  so far. Results parsers push reports into `LiveFeeds.push_reports()` (parsers are not written yet).
+
+## The simulator, and what it does and does not prove
+
+`cupbot/sim/world.py` simulates a whole contest: a latent truth for every race, a sponsor market maker that
+quotes around a lagged and biased view of it and moves its price when traded against, students who send random
+orders and leave stale limit orders, anchor venues that track the truth closely, poll and news feeds for the
+bot, and an election night where states report in order with counting-order bias. The real engine trades
+against a real limit order book (`exchange/mock.py`), then everything resolves.
+
+It is useful for: checking the mechanics end to end, checking the risk limits are never breached, choosing
+sizing and thresholds, and seeing **which assumptions the profit depends on**. It cannot tell you whether the
+real Cup market maker is as slow or as biased as the simulated one; the bot only profits in the simulator
+because the simulator was built with those edges. The week-one `measure-mm` data is what tells you which
+sweep row looks like reality.
+
+SIM_RESULTS_PLACEHOLDER
+
+## Before Oct 1 (checklist)
+
+1. Read https://sig.thesuper.market/api/v1/docs while logged in. Fill in `venue.paths`, `price_scale`,
+   `tournament_id`, and set `read_rps` / `write_rps` below the published limits. Note position limits, whether
+   you can sell a position before resolution (the recycling depends on it), and whether shorting / buying NO exists.
+2. `python3 -m cupbot whoami`, then `python3 -m cupbot live` (dry run) and read `journal/journal.sqlite`.
+3. Fill in `config/market_map.json` and real race means in `data/races_2026.json`.
+4. Run `measure-mm` in the first days and compare with the simulator sweep.
+5. Only then turn on `live_trading_enabled` and start with small caps in `config/default.json` → `risk`.

@@ -1,0 +1,11 @@
+{
+  "_README": "Election-night live model parameters. mirage = how far early counts in each state lean vs the final margin (D minus R points): negative where mail/absentee is counted late (early counts lean R), positive where early/mail votes post first (early counts lean D). ILLUSTRATIVE values: confirm each state's 2026 counting order before Nov 3.",
+  "national_night_sd": 2.0,
+  "region_night_sd": 1.0,
+  "race_night_sd": 2.6,
+  "resid_sd": 1.0,
+  "count_noise_sd": 1.0,
+  "mirage_err_sd": 2.0,
+  "shrink_k": 1.0,
+  "mirage": {"PA": -5, "WI": -5, "MI": -4, "GA": 3, "NC": 3, "FL": 2, "OH": 1, "AZ": -2, "NV": -2, "TX": 1, "VA": 2, "ME": -1, "MN": -2, "IA": 1}
+}

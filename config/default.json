@@ -1,0 +1,13 @@
+{
+  "_comment": "Overrides for cupbot/config.py defaults. Anything not listed here uses the default. Secrets go in .env, never here.",
+  "venue": {
+    "tournament_id": "",
+    "read_rps": 2.0,
+    "write_rps": 2.0,
+    "price_scale": 1.0,
+    "live_trading_enabled": false
+  },
+  "analyst": {
+    "enabled": false
+  }
+}

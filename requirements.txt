@@ -1,0 +1,5 @@
+# Core (simulator, paper trading, tests) needs only the Python standard library.
+# Live trading and anchors:
+aiohttp>=3.9
+# Claude news analyst (SDK 1.x requires Python >= 3.10):
+anthropic>=1.0

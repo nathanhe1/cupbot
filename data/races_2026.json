@@ -1,0 +1,51 @@
+{
+  "_README": "PLACEHOLDER PRIORS. Margins are rough partisan-lean guesses (D minus R, in points) for wiring and simulation only. On Oct 1 replace 'mean' with current polling averages / forecasts (Silver Bulletin, DDHQ, Cook) and check them against Kalshi and Polymarket. 'sd' is the race-level error on top of the shared national and regional errors in config.",
+  "senate": {
+    "d_holdover": 34,
+    "d_seats_needed": 51,
+    "note": "Republicans 53-47 before the election, defending 22 of 35 seats. Democrats need 17 of the 35 seats up (VP breaks ties for Republicans). Verify holdover count."
+  },
+  "house": {
+    "race_id": "HOUSE",
+    "mean": 1.5,
+    "sd": 2.5,
+    "note": "House control as one pseudo-race: national House popular vote margin minus the seat-map bias. mean > 0 means Democrats favored."
+  },
+  "races": [
+    {"race_id": "SEN-AL", "state": "AL", "region": "south", "holder": "R", "mean": -25, "sd": 4},
+    {"race_id": "SEN-AK", "state": "AK", "region": "west", "holder": "R", "mean": -8, "sd": 5},
+    {"race_id": "SEN-AR", "state": "AR", "region": "south", "holder": "R", "mean": -30, "sd": 4},
+    {"race_id": "SEN-CO", "state": "CO", "region": "west", "holder": "D", "mean": 10, "sd": 4},
+    {"race_id": "SEN-DE", "state": "DE", "region": "northeast", "holder": "D", "mean": 18, "sd": 4},
+    {"race_id": "SEN-FL", "state": "FL", "region": "south", "holder": "R", "mean": -8, "sd": 4},
+    {"race_id": "SEN-GA", "state": "GA", "region": "south", "holder": "D", "mean": 1, "sd": 4},
+    {"race_id": "SEN-ID", "state": "ID", "region": "west", "holder": "R", "mean": -30, "sd": 4},
+    {"race_id": "SEN-IL", "state": "IL", "region": "midwest", "holder": "D", "mean": 14, "sd": 4},
+    {"race_id": "SEN-IA", "state": "IA", "region": "midwest", "holder": "R", "mean": -7, "sd": 4},
+    {"race_id": "SEN-KS", "state": "KS", "region": "midwest", "holder": "R", "mean": -14, "sd": 4},
+    {"race_id": "SEN-KY", "state": "KY", "region": "south", "holder": "R", "mean": -20, "sd": 4},
+    {"race_id": "SEN-LA", "state": "LA", "region": "south", "holder": "R", "mean": -18, "sd": 4},
+    {"race_id": "SEN-ME", "state": "ME", "region": "northeast", "holder": "R", "mean": 1, "sd": 5},
+    {"race_id": "SEN-MA", "state": "MA", "region": "northeast", "holder": "D", "mean": 25, "sd": 4},
+    {"race_id": "SEN-MI", "state": "MI", "region": "midwest", "holder": "D", "mean": 2, "sd": 4},
+    {"race_id": "SEN-MN", "state": "MN", "region": "midwest", "holder": "D", "mean": 6, "sd": 4},
+    {"race_id": "SEN-MS", "state": "MS", "region": "south", "holder": "R", "mean": -15, "sd": 4},
+    {"race_id": "SEN-MT", "state": "MT", "region": "west", "holder": "R", "mean": -15, "sd": 5},
+    {"race_id": "SEN-NE", "state": "NE", "region": "midwest", "holder": "R", "mean": -8, "sd": 5},
+    {"race_id": "SEN-NH", "state": "NH", "region": "northeast", "holder": "D", "mean": 5, "sd": 4},
+    {"race_id": "SEN-NJ", "state": "NJ", "region": "northeast", "holder": "D", "mean": 12, "sd": 4},
+    {"race_id": "SEN-NM", "state": "NM", "region": "west", "holder": "D", "mean": 10, "sd": 4},
+    {"race_id": "SEN-NC", "state": "NC", "region": "south", "holder": "R", "mean": 0, "sd": 4},
+    {"race_id": "SEN-OH", "state": "OH", "region": "midwest", "holder": "R", "mean": -5, "sd": 4},
+    {"race_id": "SEN-OK", "state": "OK", "region": "south", "holder": "R", "mean": -30, "sd": 4},
+    {"race_id": "SEN-OR", "state": "OR", "region": "west", "holder": "D", "mean": 15, "sd": 4},
+    {"race_id": "SEN-RI", "state": "RI", "region": "northeast", "holder": "D", "mean": 20, "sd": 4},
+    {"race_id": "SEN-SC", "state": "SC", "region": "south", "holder": "R", "mean": -15, "sd": 4},
+    {"race_id": "SEN-SD", "state": "SD", "region": "midwest", "holder": "R", "mean": -25, "sd": 4},
+    {"race_id": "SEN-TN", "state": "TN", "region": "south", "holder": "R", "mean": -25, "sd": 4},
+    {"race_id": "SEN-TX", "state": "TX", "region": "south", "holder": "R", "mean": -7, "sd": 4},
+    {"race_id": "SEN-VA", "state": "VA", "region": "south", "holder": "D", "mean": 9, "sd": 4},
+    {"race_id": "SEN-WV", "state": "WV", "region": "south", "holder": "R", "mean": -30, "sd": 4},
+    {"race_id": "SEN-WY", "state": "WY", "region": "west", "holder": "R", "mean": -35, "sd": 4}
+  ]
+}
