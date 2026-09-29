@@ -13,7 +13,7 @@ order unless `venue.live_trading_enabled` is `true` in the config file AND you p
 
 ```bash
 cd ~/Trading
-python3 -m unittest discover -s tests -t .      # 42 tests, ~10 s
+python3 -m unittest discover -s tests -t .      # 43 tests, ~10-30 s
 python3 -m cupbot model                          # race model probabilities from data/races_2026.json
 python3 -m cupbot paper --seed 1                 # paper-trade one simulated contest, tick by tick
 python3 -m cupbot sim --runs 40 --baseline       # backtest 40 simulated contests vs doing nothing
@@ -98,7 +98,37 @@ real Cup market maker is as slow or as biased as the simulated one; the bot only
 because the simulator was built with those edges. The week-one `measure-mm` data is what tells you which
 sweep row looks like reality.
 
-SIM_RESULTS_PLACEHOLDER
+### Results (Sep 29 build, 40 simulated contests per row, `python3 -m cupbot sim --runs 40 --sweep`)
+
+"Top-3 bar" is the third-best final balance among 2,000 simulated rivals (half casual, the rest betting most of
+their balance on longshots at final-week prices). That field is an assumption too.
+
+| Scenario | Median result | P(loss) | P(top 3) |
+|---|---|---|---|
+| Default assumptions | 1.23x | 20% | 0% |
+| Sponsor MM half as biased | 1.16x | 28% | 0% |
+| MM reprices with no lag | 1.07x | 45% | 0% |
+| Sharp MM with no lag (hard case) | 1.00x | 48% | 0% |
+| Anchors twice as noisy | 1.15x | 28% | 0% |
+| Anchors on only 40% of markets | 1.24x | 30% | 0% |
+| No student order flow | 1.14x | 28% | 0% |
+| Thin MM (500 contracts a level) | 1.14x | 25% | 0% |
+| **Deep MM (4x size, 1/4 price impact)** | **1.52x** | 12% | **18%** |
+
+Risk-limit breaches: 0 in every run. Median top-3 bar: 2.6x to 3.1x.
+
+What this says:
+- **The edge comes from the sponsor's market maker being slower or more biased than Kalshi/Polymarket.** If it
+  reprices instantly and accurately, the bot roughly breaks even; the thresholds keep it from bleeding.
+- **Liquidity decides whether a top-3 finish is reachable at all.** With the default book depth the bot's best run
+  is about 2x and never clears the bar; with a deep book it places in about 1 contest in 5.
+- Sizing was tuned over 54 settings (Kelly 0.5 / 1 / 2, minimum edge 1-3 points, uncertainty buffer, market cap):
+  full Kelly with a 2-point minimum edge and half the fair-value uncertainty as extra buffer was best.
+- A naive "buy the longshot basket" final bet *lowered* top-3 odds (12% → 5% with deep liquidity), because it
+  pays in the same scenarios as the crowd's longshots. The sizer now estimates the bar per scenario from the
+  field; with that, the final-week scaling and basket raised top-3 odds from 10% to 18% (60 contests each).
+- Calibration in the sim: our Monte Carlo model alone is much worse than the anchors, so it gets a small weight;
+  its real jobs are markets with no anchor and keeping chamber/combo prices consistent with the races.
 
 ## Before Oct 1 (checklist)
 

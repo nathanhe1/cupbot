@@ -26,9 +26,9 @@ class FairValueConfig:
 
 @dataclass
 class StrategyConfig:
-    min_edge: float = 0.03           # minimum edge after crossing the spread (prob points)
-    uncertainty_mult: float = 1.0    # extra edge required per unit of fair-value uncertainty
-    kelly_mult: float = 0.5          # half-Kelly
+    min_edge: float = 0.02           # minimum edge after crossing the spread (prob points)
+    uncertainty_mult: float = 0.5    # extra edge required per unit of fair-value uncertainty
+    kelly_mult: float = 1.0          # full Kelly on the blended fair (sim-tuned; halve if week-one calibration is worse)
     max_market_frac: float = 0.15    # max notional in one market, fraction of equity
     max_order_frac: float = 0.05     # max notional per order
     jump_damp: float = 0.5           # size multiplier on the first tick after a big fair-value jump
@@ -40,11 +40,11 @@ class StrategyConfig:
     passive_edge: float = 0.03
     passive_frac: float = 0.01
     # final week / election night overrides
-    final_week_kelly_mult: float = 0.75
+    final_week_kelly_mult: float = 1.0
     final_week_max_market_frac: float = 0.25
-    night_kelly_mult: float = 0.75
+    night_kelly_mult: float = 1.0
     night_max_market_frac: float = 0.30
-    night_min_edge: float = 0.04
+    night_min_edge: float = 0.02
 
 
 @dataclass
@@ -100,15 +100,18 @@ class AnalystConfig:
 @dataclass
 class TournamentConfig:
     enabled: bool = True
-    target_multiple: float = 10.0    # final balance needed to place, x starting cash (update from leaderboard)
+    target_multiple: float = 10.0    # fixed bar (x starting cash), used when field_model is off
+    field_model: bool = True         # estimate the top-3 bar per scenario from an assumed field of rivals
+    field_size: int = 2000           # update from the leaderboard
+    field_concentrated_frac: float = 0.35
     min_scale: float = 0.5
     max_scale: float = 3.0
     phases: list = field(default_factory=lambda: ["final_week", "night"])
     # scenario basket: one concentrated correlated bet placed in the last days before the election
     basket_enabled: bool = True
-    basket_days_before: float = 2.0
+    basket_days_before: float = 5.0
     basket_max_frac: float = 0.5     # most of equity the basket may use
-    basket_max_premium: float = 0.03  # pay at most this much over fair value per contract
+    basket_max_premium: float = 0.05  # pay at most this much over fair value per contract
     basket_lo: float = 0.08          # underdog legs: fair probability between lo and hi
     basket_hi: float = 0.45
     final_max_net_d_frac: float = 1.5  # risk cap on net directional exposure once the basket is on

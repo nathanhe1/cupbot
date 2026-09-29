@@ -23,8 +23,8 @@ from .journal import NullJournal
 from .racemodel import RaceModel
 from .risk import RiskManager
 from .strategy import Strategy
-from .tournament import (best_scale, candidate_baskets, chamber_outcomes, plan_basket,
-                         scenario_payoffs)
+from .tournament import (bar_per_scenario, best_scale, candidate_baskets, chamber_outcomes,
+                         plan_basket, scenario_payoffs)
 from .types import OrderRequest
 from .types import Account, Market, OrderStatus, Side
 
@@ -60,6 +60,7 @@ class Engine:
         self._model_pd: Dict[str, float] = {}
         self.kelly_scale = 1.0          # set by the tournament sizer in the final week
         self.tournament_p = 0.0
+        self._field_prices: Optional[Dict[str, float]] = None
         self.basket: Optional[Dict] = None      # {"name", "frac", "p", "targets": {mid: signed qty}}
         self.wake = asyncio.Event() if _has_loop() else None
         self.last_marks: Dict[str, float] = {}
@@ -115,6 +116,20 @@ class Engine:
             self.night_model = LiveResultsModel(prior, states, params)
         return self.night_model.update(reports)
 
+    def _bar(self, outcomes, marks, n):
+        """Top-3 bar: per scenario from the field model, or the fixed target."""
+        t = self.cfg.tournament
+        if not t.field_model:
+            return t.target_multiple * self.cfg.starting_cash
+        key = (round(self.feeds.now() / 21600),)   # recompute at most every 6 hours
+        if getattr(self, "_bar_key", None) != key:
+            if self._field_prices is None:
+                self._field_prices = dict(marks)   # the crowd's entry prices: first look in the late phase
+            self._bar_cache = bar_per_scenario(self._field_prices, self.markets, outcomes, n, t.field_size,
+                                               t.field_concentrated_frac, self.cfg.starting_cash)
+            self._bar_key = key
+        return self._bar_cache
+
     def _tournament_scale(self, phase: str, acct: Account, marks: Dict[str, float], equity: float) -> None:
         t = self.cfg.tournament
         if not t.enabled or phase not in t.phases or not acct.positions:
@@ -125,7 +140,7 @@ class Engine:
         n = cm.params.n_draws
         pnl = scenario_payoffs(acct.positions, marks, self.markets, outcomes, n)
         grid = [g for g in (0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0) if t.min_scale <= g <= t.max_scale]
-        lam, p = best_scale(equity, pnl, t.target_multiple * self.cfg.starting_cash, grid)
+        lam, p = best_scale(equity, pnl, self._bar(outcomes, marks, n), grid)
         self.kelly_scale = lam
         self.tournament_p = p
 
@@ -145,7 +160,7 @@ class Engine:
             cands = candidate_baskets(self.markets, {m: f.p for m, f in fairs.items()}, asks, bids,
                                       t.basket_lo, t.basket_hi)
             fr = [f for f in (0.1, 0.2, 0.35, 0.5, 0.75) if f <= t.basket_max_frac]
-            name, frac, p, qty = plan_basket(equity, base, t.target_multiple * self.cfg.starting_cash,
+            name, frac, p, qty = plan_basket(equity, base, self._bar(outcomes, marks, n),
                                              cands, self.markets, outcomes, n, fr)
             targets = {m: acct.pos(m) + q for m, q in qty.items()}
             self.basket = {"name": name, "frac": frac, "p": p, "targets": targets}

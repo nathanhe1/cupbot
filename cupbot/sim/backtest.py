@@ -226,6 +226,7 @@ SWEEPS = {
     "no student flow": {"stud_rate": 0.0},
     "bigger mirage, worse mirage guess": {"mirage_scale": 1.5, "bot_mirage_err_sd": 3.0},
     "thin MM (500/level)": {"mm_size": 500.0},
+    "deep MM (4x size, 1/4 price impact)": {"mm_size": 6000.0, "mm_inv_k": 1e-5},
 }
 
 
