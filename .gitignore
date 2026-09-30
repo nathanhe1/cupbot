@@ -6,3 +6,6 @@ journal/
 KILL
 config/market_map.json
 .pytest_cache/
+tuning/data/
+tuning/*.log
+tuning/__pycache__/
