@@ -13,7 +13,7 @@ class TokenBucket:
         self.capacity = burst or max(1.0, rate_per_s)
         self.tokens = self.capacity
         self.updated = time.monotonic()
-        self._lock = asyncio.Lock()
+        self._lock = None   # created lazily inside the running loop (Python 3.9 binds locks to a loop)
 
     def _refill(self) -> None:
         now = time.monotonic()
@@ -21,6 +21,8 @@ class TokenBucket:
         self.updated = now
 
     async def acquire(self, n: float = 1.0) -> None:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             while True:
                 self._refill()

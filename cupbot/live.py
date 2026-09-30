@@ -119,6 +119,12 @@ async def run_live(cfg: BotConfig, live_orders: bool, run_seconds: Optional[floa
     try:
         await engine.run(stop_after_s=run_seconds)
     finally:
+        if live_orders:
+            try:  # leave nothing resting on the book when the bot stops
+                n = await ex.cancel_all()
+                print(f"cancelled {n} resting orders on shutdown")
+            except Exception as e:
+                print(f"WARNING: cancel on shutdown failed ({e}); run `python -m cupbot cancel-all`")
         anchor_task.cancel()
         await feed.close()
         await ex.close()
@@ -179,3 +185,121 @@ def mm_lag_report(csv_path: str, move: float = 0.02) -> str:
     lags.sort()
     return (f"{len(lags)} anchor moves; Cup repriced after median {lags[len(lags)//2]:.1f}s "
             f"(p25 {lags[len(lags)//4]:.1f}s, p75 {lags[3*len(lags)//4]:.1f}s)")
+
+
+# ---------------------------------------------------------------- day-one tools
+async def draft_market_map(cfg: BotConfig, out_path: str) -> int:
+    """List the Cup's markets, guess race/party for each from its title, attach
+    Kalshi/Polymarket anchors from data/anchors_2026.json, and write a draft map.
+    Never overwrites an existing map: writes <out>.draft instead. Review every line."""
+    from .discover import anchors_for, guess_market, kalshi_for_race_id
+    from .exchange.supermarket import SuperMarketExchange
+    ex = SuperMarketExchange(cfg.venue)
+    try:
+        markets = await ex.get_markets()
+    finally:
+        await ex.close()
+    index = {}
+    if os.path.exists("data/anchors_2026.json"):
+        with open("data/anchors_2026.json") as f:
+            index = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+    draft, unsure = {}, []
+    for m in markets:
+        g = guess_market(m.title)
+        entry = {"title": m.title, **g}
+        if g["race_id"]:
+            if g["race_id"] not in index and g["race_id"].startswith(("GOV-", "HOUSE-")):
+                found = kalshi_for_race_id(g["race_id"])
+                if found:
+                    index[g["race_id"]] = found
+            entry.update(anchors_for(g["race_id"], g["d_sign"], index))
+        if g["kind"] == "other" or g["d_sign"] == 0:
+            unsure.append(m.title)
+            entry["_check"] = "could not tell race or party from the title: fill in by hand or delete"
+        draft[m.market_id] = entry
+    path = out_path if not os.path.exists(out_path) else out_path + ".draft"
+    with open(path, "w") as f:
+        json.dump({"_README": "Draft from `python -m cupbot draft-map`. Check every race_id and d_sign "
+                              "(+1: YES = Democratic side, -1: YES = Republican side).", **draft}, f, indent=2)
+    print(f"wrote {path}: {len(draft)} markets, {len(unsure)} need a manual look")
+    for t in unsure[:20]:
+        print("  ?", t)
+    return 0
+
+
+async def preflight(cfg: BotConfig) -> int:
+    """Read-only checks before going live. Prints PASS/WARN/FAIL per item."""
+    from .anchors import AnchorBook, AnchorFeed
+    from .exchange.supermarket import SuperMarketExchange
+    results = []
+
+    def rec(level, what, detail=""):
+        results.append(level)
+        print(f"[{level}] {what}{': ' + detail if detail else ''}")
+
+    rec("PASS" if not os.path.exists(cfg.risk.kill_file) else "WARN", "kill switch",
+        "KILL file present, engine will not trade" if os.path.exists(cfg.risk.kill_file) else "clear")
+    rec("PASS", "live orders", "ENABLED in config" if cfg.venue.live_trading_enabled else
+        "disabled in config (dry run only)")
+    try:
+        import aiohttp  # noqa: F401
+        rec("PASS", "aiohttp installed")
+    except ImportError:
+        rec("FAIL", "aiohttp missing", "pip3 install --user aiohttp")
+        return 1
+    if not os.environ.get(cfg.venue.api_key_env):
+        rec("FAIL", "API key", f"{cfg.venue.api_key_env} not set (.env)")
+        return 1
+    ex = SuperMarketExchange(cfg.venue)
+    try:
+        try:
+            who = await ex.whoami()
+            rec("PASS", "whoami", str(who)[:120])
+        except Exception as e:
+            rec("FAIL", "whoami", f"{e} (check venue.paths.whoami against the docs)")
+        try:
+            ms = await ex.get_markets()
+            rec("PASS" if ms else "FAIL", "markets", f"{len(ms)} listed")
+        except Exception as e:
+            ms = []
+            rec("FAIL", "markets", str(e))
+        mapping = load_market_map(cfg.market_map_file)
+        if not mapping:
+            rec("FAIL", "market map", f"{cfg.market_map_file} missing: run draft-map and review it")
+        else:
+            ids = {m.market_id for m in ms}
+            missing = [k for k in mapping if k not in ids]
+            unmapped = [m.title for m in ms if m.market_id not in mapping]
+            rec("PASS" if not missing else "FAIL", "mapped markets exist", f"{len(missing)} missing {missing[:3]}")
+            rec("PASS" if not unmapped else "WARN", "Cup markets not in map", f"{len(unmapped)} {unmapped[:3]}")
+            bad = [k for k, v in mapping.items() if v.get("d_sign") not in (1, -1) or not v.get("race_id")]
+            rec("PASS" if not bad else "FAIL", "map entries have race_id and d_sign", f"{len(bad)} bad {bad[:3]}")
+            try:
+                books = await ex.get_books(list(mapping)[:100])
+                px = [p for b in books.values() for p in (b.best_bid, b.best_ask) if p is not None]
+                ok = px and all(0 < p < 1 for p in px)
+                rec("PASS" if ok else "FAIL", "prices parse into (0, 1)",
+                    f"{len(books)} books, sample {px[:4]} (check venue.price_scale)")
+            except Exception as e:
+                rec("FAIL", "prices", f"{e} (check venue.paths.prices and _parse_bbo)")
+            book = AnchorBook()
+            feed = AnchorFeed(mapping, book)
+            try:
+                await feed.poll_kalshi_once()
+                await feed.poll_polymarket_once()
+            finally:
+                await feed.close()
+            have = book.latest()
+            rec("PASS" if have else "WARN", "anchors", f"{len(have)} of {len(mapping)} mapped markets have a price")
+        try:
+            acct = await ex.get_account()
+            rec("PASS", "account", f"cash {acct.cash:,.0f}, {len(acct.positions)} positions")
+        except Exception as e:
+            rec("FAIL", "account", f"{e} (check venue.paths.balance / positions)")
+        rec("PASS" if ex.last_rate_headers else "WARN", "rate-limit headers",
+            str(ex.last_rate_headers) if ex.last_rate_headers else "none seen: take limits from the docs")
+    finally:
+        await ex.close()
+    fails = results.count("FAIL")
+    print(f"\n{fails} FAIL, {results.count('WARN')} WARN")
+    return 1 if fails else 0

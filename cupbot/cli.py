@@ -46,6 +46,11 @@ def main(argv=None) -> int:
     mm.add_argument("--out", default="journal/mm_lag.csv")
     mr = sub.add_parser("mm-report")
     mr.add_argument("csv", nargs="?", default="journal/mm_lag.csv")
+    rp = sub.add_parser("refresh-priors")
+    rp.add_argument("--write", action="store_true", help="write means and anchor tickers to data/")
+    dm = sub.add_parser("draft-map")
+    dm.add_argument("--out", default="config/market_map.json")
+    sub.add_parser("preflight")
     sub.add_parser("kill")
     sub.add_parser("unkill")
     sub.add_parser("cancel-all")
@@ -109,6 +114,39 @@ def main(argv=None) -> int:
         from .live import mm_lag_report
         print(mm_lag_report(a.csv))
         return 0
+
+    if a.cmd == "refresh-priors":
+        from .discover import STATE_NAMES, gather, implied_means, write_anchor_index, write_priors
+        from .engine import Engine
+        found = gather(sorted(STATE_NAMES))
+        elapsed = min(1.0, max(0.0, (time.time() - cfg.open_ts) / (cfg.election_ts - cfg.open_ts)))
+        scale = (1 - cfg.fair.pre_info_frac * elapsed) ** 0.5
+        means = implied_means(found, cfg.races_file, scale)
+        print(f"{'race':<10} {'Kalshi P(D)':>11} {'Poly P(D)':>10} {'blend':>7} {'mean':>7}")
+        for rid, f in found.items():
+            k, p = f.get("kalshi") or {}, f.get("polymarket") or {}
+            kd = (1 - k["p_r"]) if k.get("p_r") is not None else k.get("p_d")
+            pdp = (1 - p["p_r"]) if p.get("p_r") is not None else p.get("p_d")
+            fmt = lambda x: f"{x:.3f}" if x is not None else "  -  "
+            mean = means.get(rid, means.get("HOUSE") if rid == "HOUSE_D" else None)
+            print(f"{rid:<10} {fmt(kd):>11} {fmt(pdp):>10} {fmt(f.get('p_d')):>7} "
+                  f"{(f'{mean:+.1f}' if mean is not None else '-'):>7}")
+        missing = [r for r, f in found.items() if f.get("p_d") is None]
+        if missing:
+            print("no anchor found for:", ", ".join(missing))
+        if a.write:
+            write_priors(cfg.races_file, means, found)
+            write_anchor_index("data/anchors_2026.json", found)
+            print(f"wrote {cfg.races_file} and data/anchors_2026.json")
+        return 0
+
+    if a.cmd == "draft-map":
+        from .live import draft_market_map
+        return asyncio.run(draft_market_map(cfg, a.out))
+
+    if a.cmd == "preflight":
+        from .live import preflight
+        return asyncio.run(preflight(cfg))
 
     if a.cmd == "kill":
         with open(cfg.risk.kill_file, "w") as f:

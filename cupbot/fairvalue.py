@@ -120,6 +120,27 @@ class FairValueEngine:
             out[mid] = FairQuote(clip_p(p, 0.002), unc, parts)
             race_fair_d[m.race_id] = to_d(out[mid].p, m.d_sign)
 
+        # markets the model doesn't cover (governors, House districts): anchor + Cup mid only
+        for mid, m in self.markets.items():
+            if m.closed or mid in out or m.kind in ("chamber", "combo"):
+                continue
+            if m.race_id in model_pd:
+                continue
+            a = anchors.get(mid)
+            if a is None:
+                continue   # no model and no anchor: don't trade it
+            srcs = [(a, c.anchor_logit_sd)]
+            parts = {"anchor": a}
+            if mids.get(mid) is not None:
+                srcs.append((mids[mid], c.cup_mid_logit_sd))
+                parts["cup_mid"] = mids[mid]
+            p, unc = inverse_variance_blend(srcs)
+            shift = self.signal_shift(mid, now)
+            if shift:
+                parts["news"] = shift
+                p = clip_p(p + shift, 0.005)
+            out[mid] = FairQuote(clip_p(p, 0.002), unc, parts)
+
         # model-only races that have no Cup market still feed the consistency model
         for rid, pd in model_pd.items():
             if rid not in CHAMBER_KEYS and not rid.startswith("_"):

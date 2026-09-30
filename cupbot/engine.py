@@ -61,6 +61,8 @@ class Engine:
         self.kelly_scale = 1.0          # set by the tournament sizer in the final week
         self.tournament_p = 0.0
         self._field_prices: Optional[Dict[str, float]] = None
+        self.unknown: Dict[str, str] = {}       # client_id -> market_id of timed-out creates
+        self._unknown_tries: Dict[str, int] = {}
         self.basket: Optional[Dict] = None      # {"name", "frac", "p", "targets": {mid: signed qty}}
         self.wake = asyncio.Event() if _has_loop() else None
         self.last_marks: Dict[str, float] = {}
@@ -195,6 +197,24 @@ class Engine:
                                              reason=f"basket: {self.basket['name']}"))
         return keep
 
+    async def _resolve_unknown(self) -> None:
+        """Orders whose create timed out: ask the venue what happened, by client id."""
+        if not self.unknown or not hasattr(self.ex, "lookup_order"):
+            return
+        for cid in list(self.unknown):
+            tries = self._unknown_tries.get(cid, 0) + 1
+            self._unknown_tries[cid] = tries
+            try:
+                found = await self.ex.lookup_order(cid)
+            except Exception as e:
+                self.journal.log("error", {"lookup_order": cid, "error": repr(e)})
+                continue
+            if found is not None or tries >= 5:
+                # found: positions come from get_account on the next step; not found after
+                # several looks: treat as never placed
+                self.journal.log("unknown_resolved", {"client_id": cid, "found": found is not None})
+                del self.unknown[cid]
+
     async def step(self) -> None:
         now = self.feeds.now()
         phase = self.feeds.phase()
@@ -208,6 +228,7 @@ class Engine:
             self.journal.log("kill", {"cancelled": n})
             return
 
+        await self._resolve_unknown()
         live_ids = [m for m, mk in self.markets.items() if not mk.closed]
         books = await self.ex.get_books(live_ids)
         acct = await self.ex.get_account()
@@ -237,6 +258,9 @@ class Engine:
 
         for o in orders:
             o.client_id = f"cb-{int(now)}-{next(self._cid)}"
+            if o.market_id in self.unknown.values():
+                self.stats.orders_blocked += 1
+                continue   # an earlier order here is unresolved: don't stack a second one
             ok, why = self.risk.check(o, acct, books.get(o.market_id), marks, equity, now)
             if not ok:
                 self.stats.orders_blocked += 1
@@ -252,14 +276,18 @@ class Engine:
             res = await self.ex.place_order(o)
             self.stats.orders_sent += 1
             if res.status == OrderStatus.UNKNOWN:
-                # never resend blindly: the reconciler fixes state from the venue's view
+                # never resend blindly: look it up by client id on later steps
+                self.unknown[o.client_id] = o.market_id
                 self.journal.log("unknown", {"client_id": o.client_id})
-            for f in res.fills:
-                sgn = 1 if f.side == Side.BUY else -1
-                acct.cash -= sgn * f.qty * f.price
-                acct.positions[f.market_id] = acct.pos(f.market_id) + sgn * f.qty
+            fills = [(f.side, f.qty, f.price) for f in res.fills]
+            if not fills and res.filled_qty > 0:     # venues that report only totals
+                fills = [(o.side, res.filled_qty, res.avg_price or o.price)]
+            for side, qty, px in fills:
+                sgn = 1 if side == Side.BUY else -1
+                acct.cash -= sgn * qty * px
+                acct.positions[o.market_id] = acct.pos(o.market_id) + sgn * qty
                 self.stats.fills += 1
-                self.stats.volume += f.qty * f.price
+                self.stats.volume += qty * px
             self.journal.log("order", {"client_id": o.client_id, "market": o.market_id, "side": o.side.value,
                                        "qty": o.qty, "price": o.price, "status": res.status.value,
                                        "filled": res.filled_qty, "avg": res.avg_price, "reason": o.reason,

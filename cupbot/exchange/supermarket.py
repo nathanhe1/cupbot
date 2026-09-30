@@ -50,10 +50,8 @@ def _get(d: Dict[str, Any], *keys: str, default=None):
 class SuperMarketExchange(Exchange):
     name = "supermarket"
 
-    def __init__(self, cfg: VenueConfig, allow_orders: bool = False):
-        if aiohttp is None:
-            raise RuntimeError("live mode needs aiohttp: pip install -r requirements.txt")
-        key = os.environ.get(cfg.api_key_env, "")
+    def __init__(self, cfg: VenueConfig, allow_orders: bool = False, api_key: Optional[str] = None):
+        key = api_key if api_key is not None else os.environ.get(cfg.api_key_env, "")
         if not key:
             raise RuntimeError(f"set {cfg.api_key_env} in your environment or .env")
         self.cfg = cfg
@@ -63,9 +61,13 @@ class SuperMarketExchange(Exchange):
         self.write_bucket = TokenBucket(cfg.write_rps)
         self._session: Optional["aiohttp.ClientSession"] = None
         self.market_cache: Dict[str, Market] = {}
+        self.last_rate_headers: Dict[str, str] = {}
+        self.calls = 0
 
     # ------------------------------------------------------------ transport
     async def _sess(self) -> "aiohttp.ClientSession":
+        if aiohttp is None:
+            raise RuntimeError("live mode needs aiohttp: pip3 install --user aiohttp")
         if self._session is None or self._session.closed:
             conn = aiohttp.TCPConnector(limit=8, keepalive_timeout=60, ttl_dns_cache=300)
             self._session = aiohttp.ClientSession(
@@ -79,7 +81,6 @@ class SuperMarketExchange(Exchange):
     async def _request(self, method: str, name: str, *, write: bool = False, params=None, json=None,
                        headers=None, retries: int = 3, **path_kw) -> Any:
         bucket = self.write_bucket if write else self.read_bucket
-        sess = await self._sess()
         url = self._url(name, **path_kw)
         if self.cfg.tournament_id:
             params = dict(params or {})
@@ -87,23 +88,36 @@ class SuperMarketExchange(Exchange):
         for attempt in range(retries + 1):
             await bucket.acquire()
             try:
-                async with sess.request(method, url, params=params, json=json, headers=headers) as r:
-                    if r.status == 429:
-                        ra = float(r.headers.get("Retry-After", "1") or 1)
-                        bucket.cooldown(ra)
-                        continue
-                    if r.status >= 500 and attempt < retries:
-                        await asyncio.sleep(backoff_s(attempt))
-                        continue
-                    body = await r.json(content_type=None)
-                    if r.status >= 400:
-                        raise RuntimeError(f"{method} {url} -> {r.status}: {body}")
-                    return body
+                status, rheaders, body = await self._send(method, url, params, json, headers)
+                self.calls += 1
+                rl = {k: v for k, v in rheaders.items() if "ratelimit" in k.lower() or k.lower() == "retry-after"}
+                if rl:
+                    self.last_rate_headers = rl
+                if status == 429:
+                    ra = float(rheaders.get("Retry-After", "1") or 1)
+                    bucket.cooldown(ra)
+                    continue
+                if status >= 500 and attempt < retries:
+                    await asyncio.sleep(backoff_s(attempt))
+                    continue
+                if status >= 400:
+                    raise RuntimeError(f"{method} {url} -> {status}: {body}")
+                return body
             except asyncio.TimeoutError:
                 if write:
                     raise  # never retry an order create blindly
                 await asyncio.sleep(backoff_s(attempt))
         raise RuntimeError(f"{method} {url}: retries exhausted")
+
+    async def _send(self, method: str, url: str, params, json_body, headers):
+        """One HTTP exchange -> (status, headers, parsed body). Tests override this."""
+        sess = await self._sess()
+        async with sess.request(method, url, params=params, json=json_body, headers=headers) as r:
+            try:
+                body = await r.json(content_type=None)
+            except ValueError:
+                body = await r.text()
+            return r.status, dict(r.headers), body
 
     # ----------------------------------------------------------- read side
     async def whoami(self) -> Any:
@@ -198,9 +212,21 @@ class SuperMarketExchange(Exchange):
               "cancelled": OrderStatus.CANCELLED, "rejected": OrderStatus.REJECTED}.get(status, OrderStatus.ACKED)
         return OrderResult(req.client_id, st, filled, avg, venue_order_id=str(_get(body, "id", "order_id")))
 
-    async def cancel_all(self, market_id: str = "") -> int:
+    async def open_orders(self) -> List[Dict]:
         body = await self._request("GET", "orders", params={"status": "open"})
+        return body if isinstance(body, list) else _get(body, "orders", "data", default=[])
+
+    async def lookup_order(self, client_id: str) -> Optional[Dict]:
+        """Find an order by our client id (used to resolve UNKNOWN after a timeout)."""
+        body = await self._request("GET", "orders", params={"client_order_id": client_id})
         items = body if isinstance(body, list) else _get(body, "orders", "data", default=[])
+        for o in items:
+            if str(_get(o, "client_order_id", "client_id", default="")) == client_id:
+                return o
+        return None
+
+    async def cancel_all(self, market_id: str = "") -> int:
+        items = await self.open_orders()
         n = 0
         for o in items:
             if market_id and str(_get(o, "market_id")) != market_id:

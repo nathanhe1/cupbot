@@ -1,5 +1,5 @@
 {
-  "_README": "PLACEHOLDER PRIORS. Margins are rough partisan-lean guesses (D minus R, in points) for wiring and simulation only. On Oct 1 replace 'mean' with current polling averages / forecasts (Silver Bulletin, DDHQ, Cook) and check them against Kalshi and Polymarket. 'sd' is the race-level error on top of the shared national and regional errors in config.",
+  "_README": "Race means backed out of Kalshi/Polymarket prices by `python -m cupbot refresh-priors --write` on 2026-09-30 17:06. Edit by hand to disagree with the market; 'sd' is the race-level error on top of the shared national and regional errors.",
   "senate": {
     "d_holdover": 34,
     "d_seats_needed": 51,
@@ -7,45 +7,325 @@
   },
   "house": {
     "race_id": "HOUSE",
-    "mean": 1.5,
+    "mean": 5.48,
     "sd": 2.5,
     "note": "House control as one pseudo-race: national House popular vote margin minus the seat-map bias. mean > 0 means Democrats favored."
   },
   "races": [
-    {"race_id": "SEN-AL", "state": "AL", "region": "south", "holder": "R", "mean": -25, "sd": 4},
-    {"race_id": "SEN-AK", "state": "AK", "region": "west", "holder": "R", "mean": -8, "sd": 5},
-    {"race_id": "SEN-AR", "state": "AR", "region": "south", "holder": "R", "mean": -30, "sd": 4},
-    {"race_id": "SEN-CO", "state": "CO", "region": "west", "holder": "D", "mean": 10, "sd": 4},
-    {"race_id": "SEN-DE", "state": "DE", "region": "northeast", "holder": "D", "mean": 18, "sd": 4},
-    {"race_id": "SEN-FL", "state": "FL", "region": "south", "holder": "R", "mean": -8, "sd": 4},
-    {"race_id": "SEN-GA", "state": "GA", "region": "south", "holder": "D", "mean": 1, "sd": 4},
-    {"race_id": "SEN-ID", "state": "ID", "region": "west", "holder": "R", "mean": -30, "sd": 4},
-    {"race_id": "SEN-IL", "state": "IL", "region": "midwest", "holder": "D", "mean": 14, "sd": 4},
-    {"race_id": "SEN-IA", "state": "IA", "region": "midwest", "holder": "R", "mean": -7, "sd": 4},
-    {"race_id": "SEN-KS", "state": "KS", "region": "midwest", "holder": "R", "mean": -14, "sd": 4},
-    {"race_id": "SEN-KY", "state": "KY", "region": "south", "holder": "R", "mean": -20, "sd": 4},
-    {"race_id": "SEN-LA", "state": "LA", "region": "south", "holder": "R", "mean": -18, "sd": 4},
-    {"race_id": "SEN-ME", "state": "ME", "region": "northeast", "holder": "R", "mean": 1, "sd": 5},
-    {"race_id": "SEN-MA", "state": "MA", "region": "northeast", "holder": "D", "mean": 25, "sd": 4},
-    {"race_id": "SEN-MI", "state": "MI", "region": "midwest", "holder": "D", "mean": 2, "sd": 4},
-    {"race_id": "SEN-MN", "state": "MN", "region": "midwest", "holder": "D", "mean": 6, "sd": 4},
-    {"race_id": "SEN-MS", "state": "MS", "region": "south", "holder": "R", "mean": -15, "sd": 4},
-    {"race_id": "SEN-MT", "state": "MT", "region": "west", "holder": "R", "mean": -15, "sd": 5},
-    {"race_id": "SEN-NE", "state": "NE", "region": "midwest", "holder": "R", "mean": -8, "sd": 5},
-    {"race_id": "SEN-NH", "state": "NH", "region": "northeast", "holder": "D", "mean": 5, "sd": 4},
-    {"race_id": "SEN-NJ", "state": "NJ", "region": "northeast", "holder": "D", "mean": 12, "sd": 4},
-    {"race_id": "SEN-NM", "state": "NM", "region": "west", "holder": "D", "mean": 10, "sd": 4},
-    {"race_id": "SEN-NC", "state": "NC", "region": "south", "holder": "R", "mean": 0, "sd": 4},
-    {"race_id": "SEN-OH", "state": "OH", "region": "midwest", "holder": "R", "mean": -5, "sd": 4},
-    {"race_id": "SEN-OK", "state": "OK", "region": "south", "holder": "R", "mean": -30, "sd": 4},
-    {"race_id": "SEN-OR", "state": "OR", "region": "west", "holder": "D", "mean": 15, "sd": 4},
-    {"race_id": "SEN-RI", "state": "RI", "region": "northeast", "holder": "D", "mean": 20, "sd": 4},
-    {"race_id": "SEN-SC", "state": "SC", "region": "south", "holder": "R", "mean": -15, "sd": 4},
-    {"race_id": "SEN-SD", "state": "SD", "region": "midwest", "holder": "R", "mean": -25, "sd": 4},
-    {"race_id": "SEN-TN", "state": "TN", "region": "south", "holder": "R", "mean": -25, "sd": 4},
-    {"race_id": "SEN-TX", "state": "TX", "region": "south", "holder": "R", "mean": -7, "sd": 4},
-    {"race_id": "SEN-VA", "state": "VA", "region": "south", "holder": "D", "mean": 9, "sd": 4},
-    {"race_id": "SEN-WV", "state": "WV", "region": "south", "holder": "R", "mean": -30, "sd": 4},
-    {"race_id": "SEN-WY", "state": "WY", "region": "west", "holder": "R", "mean": -35, "sd": 4}
+    {
+      "race_id": "SEN-AL",
+      "state": "AL",
+      "region": "south",
+      "holder": "R",
+      "mean": -10.23,
+      "sd": 4,
+      "p_d_anchor": 0.025
+    },
+    {
+      "race_id": "SEN-AK",
+      "state": "AK",
+      "region": "west",
+      "holder": "R",
+      "mean": 3.24,
+      "sd": 5,
+      "p_d_anchor": 0.705
+    },
+    {
+      "race_id": "SEN-AR",
+      "state": "AR",
+      "region": "south",
+      "holder": "R",
+      "mean": -7.98,
+      "sd": 4,
+      "p_d_anchor": 0.0632
+    },
+    {
+      "race_id": "SEN-CO",
+      "state": "CO",
+      "region": "west",
+      "holder": "D",
+      "mean": 11.17,
+      "sd": 4,
+      "p_d_anchor": 0.9838
+    },
+    {
+      "race_id": "SEN-DE",
+      "state": "DE",
+      "region": "northeast",
+      "holder": "D",
+      "mean": 12.17,
+      "sd": 4,
+      "p_d_anchor": 0.9901
+    },
+    {
+      "race_id": "SEN-FL",
+      "state": "FL",
+      "region": "south",
+      "holder": "R",
+      "mean": -6.97,
+      "sd": 4,
+      "p_d_anchor": 0.0908
+    },
+    {
+      "race_id": "SEN-GA",
+      "state": "GA",
+      "region": "south",
+      "holder": "D",
+      "mean": 8.92,
+      "sd": 4,
+      "p_d_anchor": 0.9562
+    },
+    {
+      "race_id": "SEN-ID",
+      "state": "ID",
+      "region": "west",
+      "holder": "R",
+      "mean": -7.81,
+      "sd": 4,
+      "p_d_anchor": 0.0673
+    },
+    {
+      "race_id": "SEN-IL",
+      "state": "IL",
+      "region": "midwest",
+      "holder": "D",
+      "mean": 10.52,
+      "sd": 4,
+      "p_d_anchor": 0.9781
+    },
+    {
+      "race_id": "SEN-IA",
+      "state": "IA",
+      "region": "midwest",
+      "holder": "R",
+      "mean": -1.19,
+      "sd": 4,
+      "p_d_anchor": 0.41
+    },
+    {
+      "race_id": "SEN-KS",
+      "state": "KS",
+      "region": "midwest",
+      "holder": "R",
+      "mean": -2.89,
+      "sd": 4,
+      "p_d_anchor": 0.29
+    },
+    {
+      "race_id": "SEN-KY",
+      "state": "KY",
+      "region": "south",
+      "holder": "R",
+      "mean": -9.17,
+      "sd": 4,
+      "p_d_anchor": 0.0395
+    },
+    {
+      "race_id": "SEN-LA",
+      "state": "LA",
+      "region": "south",
+      "holder": "R",
+      "mean": -8.24,
+      "sd": 4,
+      "p_d_anchor": 0.0571
+    },
+    {
+      "race_id": "SEN-ME",
+      "state": "ME",
+      "region": "northeast",
+      "holder": "R",
+      "mean": 1.37,
+      "sd": 5,
+      "p_d_anchor": 0.59
+    },
+    {
+      "race_id": "SEN-MA",
+      "state": "MA",
+      "region": "northeast",
+      "holder": "D",
+      "mean": 11.37,
+      "sd": 4,
+      "p_d_anchor": 0.9853
+    },
+    {
+      "race_id": "SEN-MI",
+      "state": "MI",
+      "region": "midwest",
+      "holder": "D",
+      "mean": 3.2,
+      "sd": 4,
+      "p_d_anchor": 0.73
+    },
+    {
+      "race_id": "SEN-MN",
+      "state": "MN",
+      "region": "midwest",
+      "holder": "D",
+      "mean": 6.72,
+      "sd": 4,
+      "p_d_anchor": 0.901
+    },
+    {
+      "race_id": "SEN-MS",
+      "state": "MS",
+      "region": "south",
+      "holder": "R",
+      "mean": -6.77,
+      "sd": 4,
+      "p_d_anchor": 0.0972
+    },
+    {
+      "race_id": "SEN-MT",
+      "state": "MT",
+      "region": "west",
+      "holder": "R",
+      "mean": -8.24,
+      "sd": 5,
+      "p_d_anchor": 0.0855
+    },
+    {
+      "race_id": "SEN-NE",
+      "state": "NE",
+      "region": "midwest",
+      "holder": "R",
+      "mean": -3.34,
+      "sd": 5,
+      "p_d_anchor": 0.2898
+    },
+    {
+      "race_id": "SEN-NH",
+      "state": "NH",
+      "region": "northeast",
+      "holder": "D",
+      "mean": 5.64,
+      "sd": 4,
+      "p_d_anchor": 0.8601
+    },
+    {
+      "race_id": "SEN-NJ",
+      "state": "NJ",
+      "region": "northeast",
+      "holder": "D",
+      "mean": 10.8,
+      "sd": 4,
+      "p_d_anchor": 0.9808
+    },
+    {
+      "race_id": "SEN-NM",
+      "state": "NM",
+      "region": "west",
+      "holder": "D",
+      "mean": 11.17,
+      "sd": 4,
+      "p_d_anchor": 0.9838
+    },
+    {
+      "race_id": "SEN-NC",
+      "state": "NC",
+      "region": "south",
+      "holder": "R",
+      "mean": 8.54,
+      "sd": 4,
+      "p_d_anchor": 0.9491
+    },
+    {
+      "race_id": "SEN-OH",
+      "state": "OH",
+      "region": "midwest",
+      "holder": "R",
+      "mean": 1.53,
+      "sd": 4,
+      "p_d_anchor": 0.615
+    },
+    {
+      "race_id": "SEN-OK",
+      "state": "OK",
+      "region": "south",
+      "holder": "R",
+      "mean": -10.57,
+      "sd": 4,
+      "p_d_anchor": 0.0214
+    },
+    {
+      "race_id": "SEN-OR",
+      "state": "OR",
+      "region": "west",
+      "holder": "D",
+      "mean": 10.62,
+      "sd": 4,
+      "p_d_anchor": 0.979
+    },
+    {
+      "race_id": "SEN-RI",
+      "state": "RI",
+      "region": "northeast",
+      "holder": "D",
+      "mean": 12.3,
+      "sd": 4,
+      "p_d_anchor": 0.9908
+    },
+    {
+      "race_id": "SEN-SC",
+      "state": "SC",
+      "region": "south",
+      "holder": "R",
+      "mean": -5.88,
+      "sd": 4,
+      "p_d_anchor": 0.1299
+    },
+    {
+      "race_id": "SEN-SD",
+      "state": "SD",
+      "region": "midwest",
+      "holder": "R",
+      "mean": -7.52,
+      "sd": 4,
+      "p_d_anchor": 0.0747
+    },
+    {
+      "race_id": "SEN-TN",
+      "state": "TN",
+      "region": "south",
+      "holder": "R",
+      "mean": -10.31,
+      "sd": 4,
+      "p_d_anchor": 0.0241
+    },
+    {
+      "race_id": "SEN-TX",
+      "state": "TX",
+      "region": "south",
+      "holder": "R",
+      "mean": 1.66,
+      "sd": 4,
+      "p_d_anchor": 0.625
+    },
+    {
+      "race_id": "SEN-VA",
+      "state": "VA",
+      "region": "south",
+      "holder": "D",
+      "mean": 11.21,
+      "sd": 4,
+      "p_d_anchor": 0.9841
+    },
+    {
+      "race_id": "SEN-WV",
+      "state": "WV",
+      "region": "south",
+      "holder": "R",
+      "mean": -10.84,
+      "sd": 4,
+      "p_d_anchor": 0.0189
+    },
+    {
+      "race_id": "SEN-WY",
+      "state": "WY",
+      "region": "west",
+      "holder": "R",
+      "mean": -10.14,
+      "sd": 4,
+      "p_d_anchor": 0.026
+    }
   ]
 }

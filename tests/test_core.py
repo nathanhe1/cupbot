@@ -84,9 +84,10 @@ class TestRaceModel(unittest.TestCase):
         self.assertGreater(self.m.summary()["SENATE_D"], base)
 
     def test_sd_scale_sharpens(self):
-        p1 = self.m.analytic_prob("SEN-TX")
+        fav = max(self.m.races, key=lambda r: r.mean).race_id
+        p1 = self.m.analytic_prob(fav)
         self.m.sd_scale = 0.5
-        self.assertLess(self.m.analytic_prob("SEN-TX"), p1)
+        self.assertGreater(self.m.analytic_prob(fav), p1)
 
 
 def mk_markets():
