@@ -13,7 +13,7 @@ order unless `venue.live_trading_enabled` is `true` in the config file AND you p
 
 ```bash
 cd ~/Trading
-python3 -m unittest discover -s tests -t .      # 43 tests, ~10-30 s
+python3 -m unittest discover -s tests -t .      # 59 tests, ~20 s
 python3 -m cupbot model                          # race model probabilities from data/races_2026.json
 python3 -m cupbot paper --seed 1                 # paper-trade one simulated contest, tick by tick
 python3 -m cupbot sim --runs 40 --baseline       # backtest 40 simulated contests vs doing nothing
@@ -23,14 +23,16 @@ python3 -m cupbot sim --runs 30 --sweep          # same, under harder / differen
 In VS Code: open the `Trading` folder, then use Run and Debug (the configurations in `.vscode/launch.json`)
 or the Testing panel (unittest is preconfigured).
 
-The core needs only the Python standard library (works on the macOS system Python 3.9). For live trading
-and the Claude analyst install Python 3.12 (`brew install python@3.12`), then:
+The core needs only the Python standard library (works on the macOS system Python 3.9). Live trading needs
+one package, which also works on Python 3.9:
 
 ```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-cp .env.example .env        # then fill in the keys
+pip3 install --user aiohttp
+cp .env.example .env        # then put your Predictions Cup API key in it
 ```
+
+The Claude news analyst needs the Anthropic SDK, which needs Python 3.10+. This Mac has no Homebrew, so install
+Python 3.12 from python.org, then `python3.12 -m venv .venv && source .venv/bin/activate && pip install -r requirements-dev.txt`.
 
 ## What you need to supply
 
@@ -39,8 +41,7 @@ cp .env.example .env        # then fill in the keys
 | Predictions Cup API key (read + trade scopes) | `.env` → `SUPERMARKET_API_KEY` | `whoami`, `live`, `measure-mm` |
 | Tournament id, rate limits, price format | `config/default.json` → `venue` | live |
 | Real endpoint paths and field names | `config/default.json` → `venue.paths`, and the `_parse_*` helpers in `cupbot/exchange/supermarket.py` | live |
-| Cup market ids mapped to races and to Kalshi tickers / Polymarket token ids | `config/market_map.json` (copy the example) | live, anchors |
-| Current race means (polling averages / forecasts) | `data/races_2026.json` (values there are placeholders) | model |
+| Review of the draft market map | `python3 -m cupbot draft-map` writes `config/market_map.json`; check each `race_id` / `d_sign` | live, anchors |
 | Anthropic API key | `.env` → `ANTHROPIC_API_KEY`, then `analyst.enabled: true` | news analyst (optional) |
 | Kalshi API key (optional) | `.env` → `KALSHI_API_KEY` | Kalshi websocket; REST polling works without it |
 
@@ -48,6 +49,9 @@ cp .env.example .env        # then fill in the keys
 
 | Command | What it does |
 |---|---|
+| `python3 -m cupbot refresh-priors --write` | Pulls every Senate race, Senate and House control from Kalshi and Polymarket (public data), backs out race means and writes them plus anchor tickers to `data/` |
+| `python3 -m cupbot draft-map` | Lists the Cup's markets, guesses race and party from each title, attaches Kalshi/Polymarket anchors, writes `config/market_map.json` for you to review |
+| `python3 -m cupbot preflight` | Read-only PASS/FAIL checks: key, endpoints, market map, price parsing, anchors, account, rate-limit headers |
 | `python3 -m cupbot whoami` | Read-only check that the API key works |
 | `python3 -m cupbot live` | Runs against the real platform in **dry run**: journals the orders it would send |
 | `python3 -m cupbot live --live` | Sends real orders, only if the config also allows it |
@@ -82,7 +86,11 @@ Cup books ──▶ Engine.step: FairValue ──▶ Strategy ──▶ RiskMana
   from the leaderboard in late October.
 - **Election night** (`election_night.py`): for reporting races, the counted margin corrected for each state's
   counting-order "mirage"; for unreported races, the pre-close market-implied margin shifted by the swing seen
-  so far. Results parsers push reports into `LiveFeeds.push_reports()` (parsers are not written yet).
+  so far. Race calls from AP and Decision Desk HQ on Bluesky (`calls.py`) pin a race at 99.5% once two desks
+  agree, or one desk plus our live model. State results-feed parsers still need writing before Nov 3; they push
+  into `LiveFeeds.push_reports()`.
+- **Markets outside the model** (governors, House districts): traded off their Kalshi anchor blended with the Cup
+  mid; with no anchor they are not traded.
 
 ## The simulator, and what it does and does not prove
 
@@ -98,7 +106,24 @@ real Cup market maker is as slow or as biased as the simulated one; the bot only
 because the simulator was built with those edges. The week-one `measure-mm` data is what tells you which
 sweep row looks like reality.
 
-### Results (Sep 29 build, 40 simulated contests per row, `python3 -m cupbot sim --runs 40 --sweep`)
+### Results with real market priors (Sep 30 build, 40 contests per row)
+
+After `refresh-priors` the race priors match Kalshi/Polymarket (Senate D about 62%, House D about 92%). Real
+markets have more lopsided races, so there are more cheap longshots for rivals to buy and the simulated top-3
+bar rises to about 4.5x.
+
+| Scenario | Median result | P(loss) | P(2x) | P(top 3) |
+|---|---|---|---|---|
+| Default assumptions | 1.27x | 12% | 0% | 0% |
+| MM reprices with no lag | 1.02x | 45% | 0% | 0% |
+| Deep MM (4x size, 1/4 price impact) | 1.69x | 5% | 28% | 2% |
+| Deep MM, no race-call desks | 1.79x | 10% | 25% | 5% |
+
+With an instant market maker the bot loses on election night (-6k on average, worst run 0.45x): if week-one
+`measure-mm` shows the Cup reprices within seconds, cut `night_kelly_mult` and `night_max_market_frac`.
+Race calls barely change the result in the sim because the live model already reaches 95%+ by the time desks call.
+
+### Results (Sep 29 build, placeholder priors, 40 simulated contests per row, `python3 -m cupbot sim --runs 40 --sweep`)
 
 "Top-3 bar" is the third-best final balance among 2,000 simulated rivals (half casual, the rest betting most of
 their balance on longshots at final-week prices). That field is an assumption too.
@@ -130,12 +155,16 @@ What this says:
 - Calibration in the sim: our Monte Carlo model alone is much worse than the anchors, so it gets a small weight;
   its real jobs are markets with no anchor and keeping chamber/combo prices consistent with the races.
 
-## Before Oct 1 (checklist)
+## Oct 1 checklist (in order)
 
-1. Read https://sig.thesuper.market/api/v1/docs while logged in. Fill in `venue.paths`, `price_scale`,
+1. `pip3 install --user aiohttp`, `cp .env.example .env`, put the API key in `.env`.
+2. Read https://sig.thesuper.market/api/v1/docs while logged in. Fill in `venue.paths`, `price_scale`,
    `tournament_id`, and set `read_rps` / `write_rps` below the published limits. Note position limits, whether
    you can sell a position before resolution (the recycling depends on it), and whether shorting / buying NO exists.
-2. `python3 -m cupbot whoami`, then `python3 -m cupbot live` (dry run) and read `journal/journal.sqlite`.
-3. Fill in `config/market_map.json` and real race means in `data/races_2026.json`.
-4. Run `measure-mm` in the first days and compare with the simulator sweep.
-5. Only then turn on `live_trading_enabled` and start with small caps in `config/default.json` → `risk`.
+3. `python3 -m cupbot refresh-priors --write` (same morning, so priors are current).
+4. `python3 -m cupbot draft-map`, then review `config/market_map.json`, especially three-way races (NE, MT, SD, ID).
+5. `python3 -m cupbot preflight` until there are no FAILs.
+6. `python3 -m cupbot live` (dry run) through the noon open; read the `dry_order` rows in `journal/journal.sqlite`.
+7. `python3 -m cupbot measure-mm --minutes 120` in the first days and compare with the simulator sweep.
+8. Only then set `live_trading_enabled: true`, keep small caps in `config/default.json` → `risk`, and run
+   `python3 -m cupbot live --live`.

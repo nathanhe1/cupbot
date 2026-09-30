@@ -167,5 +167,39 @@ class TestAnchorsAndDiscovery(unittest.TestCase):
         self.assertLess(out["G"].p, 0.33)
 
 
+class TestCalls(unittest.TestCase):
+    def setUp(self):
+        from cupbot.calls import CallParser
+        idx = {"SEN-NC": {"cand_d": "Roy Cooper", "cand_r": "Michael Whatley"},
+               "SEN-NE": {"cand_d": "Cindy Burbank", "cand_r": "Pete Ricketts", "cand_other": ["Dan Osborn"]},
+               "SEN-VA": {"cand_d": "Mark Warner", "cand_r": "Bert Mizusawa"}}
+        self.p = CallParser(idx)
+
+    def test_parse_calls(self):
+        self.assertEqual(self.p.parse("RACE CALL: Roy Cooper wins the North Carolina Senate race. #APracecall"),
+                         ("SEN-NC", "D"))
+        self.assertEqual(self.p.parse("Decision Desk HQ projects Dan Osborn (I) wins the Nebraska Senate race"),
+                         ("SEN-NE", "D"))
+        self.assertEqual(self.p.parse("BREAKING: Republican wins West Virginia Senate race"), ("SEN-WV", "R"))
+
+    def test_rejects_non_calls(self):
+        self.assertIsNone(self.p.parse("Roy Cooper leads in the North Carolina Senate race with 30% in"))
+        self.assertIsNone(self.p.parse("North Carolina Senate race is too close to call"))
+        self.assertIsNone(self.p.parse("Mark Warner wins the North Carolina Senate race"))  # name/state mismatch
+        self.assertIsNone(self.p.parse("Democrat wins Virginia House race"))
+
+    def test_confirmation_rule(self):
+        from cupbot.calls import Call, CallBook
+        b = CallBook(min_sources=2, agree_p=0.85)
+        b.add(Call("SEN-NC", "D", "ap", 0, ""))
+        self.assertEqual(b.effective(), {})
+        self.assertEqual(b.effective({"SEN-NC": (0.9, 0.01)}), {"SEN-NC": "D"})
+        self.assertEqual(b.effective({"SEN-NC": (0.6, 0.01)}), {})
+        b.add(Call("SEN-NC", "D", "ddhq", 0, ""))
+        self.assertEqual(b.effective(), {"SEN-NC": "D"})
+        b.add(Call("SEN-NC", "R", "someone", 0, ""))
+        self.assertEqual(b.effective(), {})   # conflicting calls cancel
+
+
 if __name__ == "__main__":
     unittest.main()

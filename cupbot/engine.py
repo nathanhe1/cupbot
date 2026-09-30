@@ -61,6 +61,7 @@ class Engine:
         self.kelly_scale = 1.0          # set by the tournament sizer in the final week
         self.tournament_p = 0.0
         self._field_prices: Optional[Dict[str, float]] = None
+        self._logged_calls = set()
         self.unknown: Dict[str, str] = {}       # client_id -> market_id of timed-out creates
         self._unknown_tries: Dict[str, int] = {}
         self.basket: Optional[Dict] = None      # {"name", "frac", "p", "targets": {mid: signed qty}}
@@ -96,8 +97,9 @@ class Engine:
         if phase != "night":
             return None
         reports = self.feeds.live_reports()
+        book = self.feeds.call_book()
         if reports is None:
-            return None
+            return self._apply_calls(None, book)
         if self.night_model is None:
             params = self.feeds.night_params() or NightParams()
             sd_close = params.sd_close()
@@ -116,7 +118,22 @@ class Engine:
                 prior[r.race_id] = sd_close * norm_ppf(p_d)
             states = {r.race_id: r.state for r in self.model.races}
             self.night_model = LiveResultsModel(prior, states, params)
-        return self.night_model.update(reports)
+        return self._apply_calls(self.night_model.update(reports), book)
+
+    def _apply_calls(self, live, book):
+        """Confirmed race calls pin a race at 0.995 / 0.005 (never certainty)."""
+        if book is None:
+            return live
+        eff = book.effective(live)
+        if not eff:
+            return live
+        live = dict(live or {})
+        for rid, party in eff.items():
+            live[rid] = (0.995 if party == "D" else 0.005, 0.003)
+            if rid not in self._logged_calls:
+                self._logged_calls.add(rid)
+                self.journal.log("race_call", {"race": rid, "party": party})
+        return live
 
     def _bar(self, outcomes, marks, n):
         """Top-3 bar: per scenario from the field model, or the fixed target."""

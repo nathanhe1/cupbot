@@ -94,6 +94,11 @@ class SimParams:
     mirage_scale: float = 1.0
     bot_mirage_err_sd: float = 1.5
     truth_samples: int = 300
+    # election-night call desks
+    call_desks: int = 2
+    call_p: float = 0.995        # a desk calls a race once the truth passes this
+    call_delay_max: int = 2      # ticks
+    wrong_call_prob: float = 0.01  # per desk per race: calls the wrong side (tests the confirmation rule)
 
 
 @dataclass
@@ -472,6 +477,35 @@ class SimWorld(Feeds):
             counted = k + self.mirage.get(rt.state, 0.0) * (1 - r) + self.rng.gauss(0, 1.0) * (1 - r)
             reports[rid] = RaceReport(rt.state, r, counted)
         return reports
+
+    def call_book(self):
+        if self._night_t() < 0 or not self.p.call_desks:
+            return None
+        from ..calls import Call, CallBook
+        if not hasattr(self, "_calls"):
+            self._calls = CallBook()
+            self._call_plan = {}
+        tr = self.truth(0)
+        for rid in self.races:
+            if rid == "HOUSE":
+                continue
+            m = next(x for x in self.markets if x.race_id == rid)
+            p_d = tr[m.market_id] if m.d_sign >= 0 else 1 - tr[m.market_id]
+            for desk in range(self.p.call_desks):
+                key = (rid, desk)
+                if key in self._call_plan:
+                    continue
+                wrong = self.rng.random() < self.p.wrong_call_prob / max(1, self.total_ticks - self.pre_ticks)
+                if p_d >= self.p.call_p or p_d <= 1 - self.p.call_p or wrong:
+                    party = "D" if p_d >= 0.5 else "R"
+                    if wrong:
+                        party = "R" if party == "D" else "D"
+                    self._call_plan[key] = (self.t + self.rng.randint(0, self.p.call_delay_max), party)
+            for desk in range(self.p.call_desks):
+                plan = self._call_plan.get((rid, desk))
+                if plan and plan[0] <= self.t:
+                    self._calls.add(Call(rid, plan[1], f"desk{desk}", self.now(), "sim"))
+        return self._calls
 
     def night_params(self):
         fn = 1 - self.p.frac_pre - self.p.frac_resid

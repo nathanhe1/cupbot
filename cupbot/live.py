@@ -46,6 +46,7 @@ class LiveFeeds(Feeds):
         self.races_file = races_file
         self._signals: List[Signal] = []
         self._reports: Optional[Dict[str, RaceReport]] = None
+        self._calls = None   # calls.CallBook, set by run_live on election night
 
     def now(self) -> float:
         return time.time()
@@ -87,6 +88,9 @@ class LiveFeeds(Feeds):
     def live_reports(self):
         return self._reports
 
+    def call_book(self):
+        return self._calls
+
     def night_params(self):
         path = "data/night_2026.json"
         if not os.path.exists(path):
@@ -116,6 +120,7 @@ async def run_live(cfg: BotConfig, live_orders: bool, run_seconds: Optional[floa
     book.on_change = lambda _mid: engine.poke()   # reprice the instant an anchor moves
     print(f"running {'LIVE' if live_orders else 'DRY-RUN'} on {len(markets)} markets; journal {cfg.journal_path}")
     anchor_task = asyncio.ensure_future(feed.run())
+    calls_task = asyncio.ensure_future(_calls_when_due(cfg, feeds, engine))
     try:
         await engine.run(stop_after_s=run_seconds)
     finally:
@@ -126,9 +131,26 @@ async def run_live(cfg: BotConfig, live_orders: bool, run_seconds: Optional[floa
             except Exception as e:
                 print(f"WARNING: cancel on shutdown failed ({e}); run `python -m cupbot cancel-all`")
         anchor_task.cancel()
+        calls_task.cancel()
         await feed.close()
         await ex.close()
         journal.close()
+
+
+async def _calls_when_due(cfg: BotConfig, feeds: "LiveFeeds", engine: Engine) -> None:
+    """From one hour before polls close: listen for race calls on Bluesky."""
+    from .calls import CallBook, CallParser, listen
+    wait = cfg.election_ts - 3600 - time.time()
+    if wait > 0:
+        await asyncio.sleep(wait)
+    index = {}
+    if os.path.exists("data/anchors_2026.json"):
+        with open("data/anchors_2026.json") as f:
+            index = json.load(f)
+    feeds._calls = CallBook()
+    await listen(CallParser(index), feeds._calls, on_call=lambda c: (engine.journal.log(
+        "call_seen", {"race": c.race_id, "party": c.party, "source": c.source, "text": c.text[:200]}),
+        engine.poke()))
 
 
 async def measure_mm(cfg: BotConfig, minutes: float, out_csv: str) -> None:
@@ -213,6 +235,10 @@ async def draft_market_map(cfg: BotConfig, out_path: str) -> int:
                 if found:
                     index[g["race_id"]] = found
             entry.update(anchors_for(g["race_id"], g["d_sign"], index))
+        others = (index.get(g["race_id"] or "") or {}).get("cand_other") or []
+        if others:
+            entry["_check"] = (f"three-way race (also {', '.join(others)}): the model's D side means 'not the "
+                               "Republican'. Make sure d_sign and anchors match what this market's YES means.")
         if g["kind"] == "other" or g["d_sign"] == 0:
             unsure.append(m.title)
             entry["_check"] = "could not tell race or party from the title: fill in by hand or delete"

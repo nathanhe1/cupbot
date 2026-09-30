@@ -38,3 +38,7 @@ class Feeds(abc.ABC):
     def night_params(self) -> Optional["NightParams"]:
         """Election-night model parameters (mirage table etc.). None -> defaults."""
         return None
+
+    def call_book(self):
+        """Election night: a calls.CallBook of race calls from call desks, or None."""
+        return None

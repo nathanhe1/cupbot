@@ -1,5 +1,5 @@
 {
-  "_README": "Race means backed out of Kalshi/Polymarket prices by `python -m cupbot refresh-priors --write` on 2026-09-30 17:06. Edit by hand to disagree with the market; 'sd' is the race-level error on top of the shared national and regional errors.",
+  "_README": "Race means backed out of Kalshi/Polymarket prices by `python -m cupbot refresh-priors --write` on 2026-09-30 17:09. Edit by hand to disagree with the market; 'sd' is the race-level error on top of the shared national and regional errors.",
   "senate": {
     "d_holdover": 34,
     "d_seats_needed": 51,
@@ -188,9 +188,9 @@
       "state": "NE",
       "region": "midwest",
       "holder": "R",
-      "mean": -3.34,
+      "mean": -3.42,
       "sd": 5,
-      "p_d_anchor": 0.2898
+      "p_d_anchor": 0.2849
     },
     {
       "race_id": "SEN-NH",
@@ -206,18 +206,18 @@
       "state": "NJ",
       "region": "northeast",
       "holder": "D",
-      "mean": 10.8,
+      "mean": 10.79,
       "sd": 4,
-      "p_d_anchor": 0.9808
+      "p_d_anchor": 0.9806
     },
     {
       "race_id": "SEN-NM",
       "state": "NM",
       "region": "west",
       "holder": "D",
-      "mean": 11.17,
+      "mean": 11.2,
       "sd": 4,
-      "p_d_anchor": 0.9838
+      "p_d_anchor": 0.984
     },
     {
       "race_id": "SEN-NC",
@@ -260,9 +260,9 @@
       "state": "RI",
       "region": "northeast",
       "holder": "D",
-      "mean": 12.3,
+      "mean": 12.19,
       "sd": 4,
-      "p_d_anchor": 0.9908
+      "p_d_anchor": 0.9903
     },
     {
       "race_id": "SEN-SC",
@@ -278,9 +278,9 @@
       "state": "SD",
       "region": "midwest",
       "holder": "R",
-      "mean": -7.52,
+      "mean": -7.61,
       "sd": 4,
-      "p_d_anchor": 0.0747
+      "p_d_anchor": 0.0725
     },
     {
       "race_id": "SEN-TN",
@@ -314,9 +314,9 @@
       "state": "WV",
       "region": "south",
       "holder": "R",
-      "mean": -10.84,
+      "mean": -10.8,
       "sd": 4,
-      "p_d_anchor": 0.0189
+      "p_d_anchor": 0.0192
     },
     {
       "race_id": "SEN-WY",
