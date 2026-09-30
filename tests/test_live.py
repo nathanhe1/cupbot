@@ -218,3 +218,62 @@ class TestCalls(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUnattended(unittest.TestCase):
+    def test_tee_journal_forwards_alerts(self):
+        from cupbot.journal import NullJournal
+        from cupbot.notify import Notifier, TeeJournal
+        sent = []
+        n = Notifier("t", "tok")
+        n.send = lambda title, body, priority="default", key="": sent.append((title, priority))
+        j = TeeJournal(NullJournal(), n)
+        j.log("halt", {"reason": "drawdown"})
+        j.log("signal", {"x": 1})
+        j.log("order", {"filled": 20000, "avg": 0.5, "side": "buy", "market": "m", "reason": "take"})
+        self.assertEqual(sent, [("cupbot: halt", "urgent"), ("cupbot: big fill", "default")])
+
+    def test_phone_commands(self):
+        import tempfile
+        from cupbot.config import BotConfig
+        from cupbot.live import _command_handler
+
+        class E:
+            last_acct = None
+            last_equity = 123.0
+            last_error = ""
+
+            class risk:
+                class state:
+                    halted = False
+                    halt_reason = ""
+
+            def poke(self):
+                pass
+        cfg = BotConfig()
+        cfg.risk.kill_file = os.path.join(tempfile.mkdtemp(), "KILL")
+        h = _command_handler(cfg, E())
+        self.assertIn("KILL set", h("kill"))
+        self.assertTrue(os.path.exists(cfg.risk.kill_file))
+        self.assertIn("kill ON", h("status"))
+        self.assertIn("cleared", h("resume"))
+        self.assertFalse(os.path.exists(cfg.risk.kill_file))
+        self.assertIsNone(h("buy"))   # there is no trading command
+
+    def test_engine_stop(self):
+        from cupbot.config import BotConfig
+        from cupbot.sim.world import SimParams, SimWorld
+        w = SimWorld(RACES, SimParams(seed=5))
+        cfg = BotConfig()
+        cfg.loop_interval_s = 0.01
+        eng = Engine(cfg, w.exchange, w, RaceModel.from_json(RACES, ModelParams(n_draws=200)), w.markets,
+                     dry_run=True)
+
+        async def go():
+            async def stopper():
+                await asyncio.sleep(0.2)
+                eng.stop()
+            asyncio.ensure_future(stopper())
+            await asyncio.wait_for(eng.run(), timeout=5)
+        run(go())
+        self.assertTrue(eng.stopping)

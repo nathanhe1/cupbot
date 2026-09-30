@@ -13,7 +13,7 @@ order unless `venue.live_trading_enabled` is `true` in the config file AND you p
 
 ```bash
 cd ~/Trading
-python3 -m unittest discover -s tests -t .      # 59 tests, ~20 s
+python3 -m unittest discover -s tests -t .      # 62 tests, ~20 s
 python3 -m cupbot model                          # race model probabilities from data/races_2026.json
 python3 -m cupbot paper --seed 1                 # paper-trade one simulated contest, tick by tick
 python3 -m cupbot sim --runs 40 --baseline       # backtest 40 simulated contests vs doing nothing
@@ -52,12 +52,49 @@ Python 3.12 from python.org, then `python3.12 -m venv .venv && source .venv/bin/
 | `python3 -m cupbot refresh-priors --write` | Pulls every Senate race, Senate and House control from Kalshi and Polymarket (public data), backs out race means and writes them plus anchor tickers to `data/` |
 | `python3 -m cupbot draft-map` | Lists the Cup's markets, guesses race and party from each title, attaches Kalshi/Polymarket anchors, writes `config/market_map.json` for you to review |
 | `python3 -m cupbot preflight` | Read-only PASS/FAIL checks: key, endpoints, market map, price parsing, anchors, account, rate-limit headers |
+| `python3 -m cupbot status` | Kill-switch state, last start/stop/halt/error, recent orders (from the journal) |
+| `python3 -m cupbot record` | Records Kalshi + Polymarket top-of-book changes to `journal/ticks/` (public data) |
 | `python3 -m cupbot whoami` | Read-only check that the API key works |
 | `python3 -m cupbot live` | Runs against the real platform in **dry run**: journals the orders it would send |
 | `python3 -m cupbot live --live` | Sends real orders, only if the config also allows it |
 | `python3 -m cupbot measure-mm --minutes 120` then `mm-report` | Week-one measurement of how fast the sponsor's market maker reprices after Kalshi/Polymarket move |
 | `python3 -m cupbot kill` / `unkill` | Creates / removes `KILL`. With it present the engine cancels everything and places nothing |
 | `python3 -m cupbot cancel-all` | Standalone cancel of every resting order |
+
+## Running it unattended on a server
+
+The bot should not depend on the MacBook being open. Run it on a small always-on server in AWS **us-east-1
+(Virginia)**: Kalshi, Polymarket and (most likely) the Cup platform are all served from there, so it is also
+the lowest-latency place to trade from. From this Mac the measured round trips are Kalshi 35 ms (p90 114 ms)
+and Polymarket's feed 51 ms (p90 140 ms), over campus Wi-Fi that also drops.
+
+**Cost:** an AWS Lightsail Linux instance, 1 GB plan, about **$5/month** (roughly $6 for the whole contest).
+An EC2 t4g.micro is similar. Nothing else is paid; ntfy alerts are free.
+
+**Setup (about 20 minutes, once):**
+1. AWS console → Lightsail → Create instance → Linux, **Ubuntu 24.04**, region **Virginia (us-east-1)**, 1 GB plan.
+   Download the SSH key it offers.
+2. On the Mac: `bash deploy/push.sh ubuntu@<server-ip> ~/Downloads/<key>.pem`
+3. On the server (`ssh -i <key>.pem ubuntu@<server-ip>`): `bash ~/Trading/deploy/setup_vm.sh`
+4. `sudo nano /home/cupbot/Trading/.env`: API key, `NTFY_TOPIC`, `NTFY_CMD_TOKEN` (long random strings).
+   Copy your reviewed `config/market_map.json` and `config/default.json` over with `push.sh` too.
+5. `cupbot preflight`, then `sudo systemctl start cupbot` and `cupbot logs`. It runs as a dry run.
+6. When you decide to trade for real: set `live_trading_enabled: true` in `config/default.json` on the server
+   **and** `CUPBOT_ARGS=--live` in `.env`, then `cupbot restart`.
+
+What keeps it safe with nobody watching:
+- systemd restarts it within 10 s after a crash or reboot; on every start it cancels leftover resting orders,
+  and on every stop it cancels its resting orders before exiting.
+- All hard risk limits stay in force (per order, per market, gross, net direction, orders per minute, price band,
+  stale book, 35% 24-hour drawdown halt). A drawdown halt stays on until you clear it over SSH.
+- **Phone alerts** (ntfy app, subscribe to your `NTFY_TOPIC`): start/stop, errors, halts, kill, big fills,
+  race calls, the final-week basket.
+- **Phone kill switch:** in the ntfy app publish to `<NTFY_TOPIC>-cmd` the message `kill <token>`
+  (also `resume <token>`, `status <token>`). There is no command that places a trade. Over SSH from a phone
+  app (e.g. Termius): `cupbot kill`, `cupbot status`, `cupbot logs`, `cupbot stop`.
+- The tick recorder runs as its own service (`cupbot-recorder`), so tuning data keeps accumulating.
+
+Update the code later from the Mac with `bash deploy/push.sh ubuntu@<server-ip> <key>.pem`.
 
 ## How it works
 

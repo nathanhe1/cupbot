@@ -205,6 +205,11 @@ def anchors_for(race_id: str, d_sign: int, index: Dict[str, dict]) -> Dict[str, 
     """Anchor entries for a Cup market whose YES is the D side (d_sign=+1) or R side (-1)."""
     e = index.get(race_id) or {}
     out: Dict[str, dict] = {}
+    if e.get("cand_other"):
+        # three-way race: the model's D side is "anyone but the Republican", so anchor it
+        # on 1 - P(Republican) at both venues (checked: using the Democrat-only market put
+        # a 5-8 cent gap between venues in ID, MT and SD on Sep 30)
+        e = dict(e, kalshi_d=None, poly_d_token=None)
     if d_sign > 0:
         if e.get("kalshi_d"):
             out["kalshi"] = {"ticker": e["kalshi_d"], "invert": False}

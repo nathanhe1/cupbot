@@ -1,0 +1,27 @@
+# systemd unit: runs the bot, restarts it within 10 s if it crashes or the VM reboots.
+# Installed by deploy/setup_vm.sh. Mode comes from /home/cupbot/Trading/.env:
+#   CUPBOT_ARGS=           -> dry run (default)
+#   CUPBOT_ARGS=--live     -> real orders (config venue.live_trading_enabled must also be true)
+[Unit]
+Description=cupbot Predictions Cup trading bot
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cupbot
+WorkingDirectory=/home/cupbot/Trading
+EnvironmentFile=/home/cupbot/Trading/.env
+ExecStart=/bin/sh -c 'exec /home/cupbot/Trading/.venv/bin/python -m cupbot live $CUPBOT_ARGS'
+Restart=always
+RestartSec=10
+# give the bot time to cancel resting orders on stop
+KillSignal=SIGINT
+TimeoutStopSec=30
+# don't restart-loop forever on a config error: 10 failures in 10 minutes -> stays down, alert via ntfy
+StartLimitIntervalSec=600
+StartLimitBurst=10
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

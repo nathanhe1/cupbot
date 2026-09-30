@@ -23,6 +23,10 @@ class Feeds(abc.ABC):
     def anchors(self) -> Dict[str, float]:
         """market_id -> P(YES) from external real-money venues."""
 
+    def anchor_disagreement(self) -> Dict[str, float]:
+        """market_id -> log-odds gap between anchor venues (0 or missing = one venue)."""
+        return {}
+
     @abc.abstractmethod
     def poll_means(self) -> Dict[str, float]:
         """race_id -> expected D margin (points) for the race model."""

@@ -64,6 +64,9 @@ class Engine:
         self._logged_calls = set()
         self._acct: Optional[Account] = None
         self._acct_t = 0.0
+        self.last_equity = 0.0
+        self.last_error = ""
+        self.last_acct: Optional[Account] = None
         self.unknown: Dict[str, str] = {}       # client_id -> market_id of timed-out creates
         self._unknown_tries: Dict[str, int] = {}
         self.basket: Optional[Dict] = None      # {"name", "frac", "p", "targets": {mid: signed qty}}
@@ -264,14 +267,19 @@ class Engine:
                 mids[mid] = b.mid
         self.last_marks = marks
         equity = acct.mark_to(marks)
+        was_halted = self.risk.state.halted
         self.risk.update_equity(equity, now)
-
+        if self.risk.state.halted and not was_halted:
+            self.journal.log("halt", {"reason": self.risk.state.halt_reason, "equity": round(equity)})
+        self.last_equity = equity
+        self.last_acct = acct
         model_pd = self._model_probs(now)
         for s in self.feeds.signals():
             if self.fair.add_signal(s):
                 self.journal.log("signal", {"market": s.market_id, "delta": s.delta, "reason": s.reason,
                                             "sources": s.sources})
         live = self._live(phase)
+        self.fair.anchor_gap = self.feeds.anchor_disagreement()
         fairs = self.fair.compute(now, model_pd, self.feeds.anchors(), mids, live)
 
         self._tournament_scale(phase, acct, marks, equity)
@@ -324,12 +332,14 @@ class Engine:
         start = time.time()
         if self.wake is None:
             self.wake = asyncio.Event()
-        while True:
+        self.stopping = False
+        while not self.stopping:
             t0 = time.time()
             try:
                 await self.step()
             except Exception as e:  # keep running; the journal records the failure
-                self.journal.log("error", {"error": repr(e)})
+                self.journal.log("error", {"error": repr(e)[:500]})
+                self.last_error = repr(e)[:200]
             if stop_after_s is not None and time.time() - start > stop_after_s:
                 return
             timeout = max(0.0, self.cfg.loop_interval_s - (time.time() - t0))
@@ -338,6 +348,11 @@ class Engine:
             except asyncio.TimeoutError:
                 pass
             self.wake.clear()
+
+    def stop(self) -> None:
+        """Ask run() to finish after the current step (SIGINT / SIGTERM)."""
+        self.stopping = True
+        self.poke()
 
     def poke(self) -> None:
         if self.wake is not None:

@@ -58,6 +58,7 @@ class FairValueEngine:
         self.consistency = copy.deepcopy(model)
         self.signals: Dict[str, List[Signal]] = {}
         self.rejected_signals = 0
+        self.anchor_gap: Dict[str, float] = {}   # market -> log-odds gap between anchor venues
 
     # ------------------------------------------------------------ signals
     def add_signal(self, sig: Signal) -> bool:
@@ -83,6 +84,10 @@ class FairValueEngine:
         return clamp(total, -self.cfg.signal_total_cap, self.cfg.signal_total_cap)
 
     # ------------------------------------------------------------ compute
+    def _anchor_sd(self, mid: str) -> float:
+        # half the venue gap is roughly the sd of the blended anchor's error
+        return max(self.cfg.anchor_logit_sd, 0.5 * self.anchor_gap.get(mid, 0.0))
+
     def compute(self, now: float, model_pd: Dict[str, float], anchors: Dict[str, float],
                 mids: Dict[str, float],
                 live: Optional[Dict[str, Tuple[float, float]]] = None) -> Dict[str, FairQuote]:
@@ -102,7 +107,7 @@ class FairValueEngine:
             parts = {"model": p_model}
             a = anchors.get(mid)
             if a is not None:
-                srcs.append((a, c.anchor_logit_sd))
+                srcs.append((a, self._anchor_sd(mid)))
                 parts["anchor"] = a
             elif mids.get(mid) is not None:
                 srcs.append((mids[mid], c.cup_mid_logit_sd))
@@ -129,7 +134,7 @@ class FairValueEngine:
             a = anchors.get(mid)
             if a is None:
                 continue   # no model and no anchor: don't trade it
-            srcs = [(a, c.anchor_logit_sd)]
+            srcs = [(a, self._anchor_sd(mid))]
             parts = {"anchor": a}
             if mids.get(mid) is not None:
                 srcs.append((mids[mid], c.cup_mid_logit_sd))
@@ -164,7 +169,7 @@ class FairValueEngine:
                 srcs = [(p_model, c.consistency_logit_sd)]
                 a = anchors.get(mid)
                 if a is not None:
-                    srcs.append((a, c.anchor_logit_sd))
+                    srcs.append((a, self._anchor_sd(mid)))
                     parts["anchor"] = a
                 elif mids.get(mid) is not None:
                     srcs.append((mids[mid], c.cup_mid_logit_sd))

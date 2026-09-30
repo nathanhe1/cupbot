@@ -7,8 +7,7 @@ Writes journal/ticks/YYYY-MM-DD.csv with one row per top-of-book CHANGE:
     recv_ts, venue, race_id, side (D|R), bid, ask, bid_size, ask_size, rtt_ms
 Each venue is fetched with one batched request per poll, so this costs Kalshi
 ~1 request per interval and Polymarket ~1. Public market data only.
-The data feeds `python -m cupbot tick-report` (latency, lead-lag, divergence),
-which is what calibrates the anchor weights and thresholds on real prices."""
+Analyse it (with the websocket recorder's richer data) using tuning/lab.py."""
 
 from __future__ import annotations
 

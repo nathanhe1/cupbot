@@ -1,0 +1,17 @@
+# Records Kalshi + Polymarket ticks (public data) for tuning and the MM-lag measurement.
+[Unit]
+Description=cupbot anchor tick recorder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cupbot
+WorkingDirectory=/home/cupbot/Trading/tuning
+ExecStart=/home/cupbot/Trading/.venv/bin/python recorder.py --minutes 0
+Restart=always
+RestartSec=10
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,8 @@ import asyncio
 import csv
 import json
 import os
+import signal
+import threading
 import time
 from typing import Dict, List, Optional
 
@@ -19,6 +21,7 @@ from .election_night import NightParams, RaceReport
 from .engine import Engine
 from .feeds import Feeds
 from .journal import Journal
+from .notify import Notifier, TeeJournal
 from .racemodel import ModelParams, RaceModel
 from .types import Market, Signal
 
@@ -64,6 +67,9 @@ class LiveFeeds(Feeds):
 
     def anchors(self) -> Dict[str, float]:
         return self.anchor_book.latest()
+
+    def anchor_disagreement(self) -> Dict[str, float]:
+        return self.anchor_book.disagreement()
 
     def poll_means(self) -> Dict[str, float]:
         # re-read so you can edit data/races_2026.json while the bot runs
@@ -116,7 +122,24 @@ async def run_live(cfg: BotConfig, live_orders: bool, run_seconds: Optional[floa
     feeds = LiveFeeds(cfg, book, cfg.races_file)
     model = RaceModel.from_json(cfg.races_file, ModelParams())
     journal = Journal(cfg.journal_path)
+    notifier = Notifier.from_env()
+    if notifier:
+        journal = TeeJournal(journal, notifier)
     engine = Engine(cfg, ex, feeds, model, markets, journal=journal, dry_run=not live_orders)
+    if live_orders:
+        n = await ex.cancel_all()   # start from a clean book after a crash/restart
+        print(f"cancelled {n} leftover resting orders at start")
+    stop_cmds = threading.Event()
+    if notifier:
+        threading.Thread(target=notifier.listen_commands, args=(_command_handler(cfg, engine), stop_cmds),
+                         daemon=True).start()
+    journal.log("start", {"mode": "LIVE" if live_orders else "dry run", "markets": len(markets)})
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, engine.stop)   # finish the step, then cancel orders below
+        except (NotImplementedError, RuntimeError):
+            pass
     book.on_change = lambda _mid: engine.poke()   # reprice the instant an anchor moves
     print(f"running {'LIVE' if live_orders else 'DRY-RUN'} on {len(markets)} markets; journal {cfg.journal_path}")
     anchor_task = asyncio.ensure_future(feed.run())
@@ -135,9 +158,35 @@ async def run_live(cfg: BotConfig, live_orders: bool, run_seconds: Optional[floa
         calls_task.cancel()
         if warm_task:
             warm_task.cancel()
+        stop_cmds.set()
+        journal.log("stop", {"equity": round(engine.last_equity)})
         await feed.close()
         await ex.close()
         journal.close()
+
+
+def _command_handler(cfg: BotConfig, engine: Engine):
+    """Phone commands (see notify.py). Runs on the listener thread: only touches files
+    and reads engine state; the engine loop itself acts on the KILL file."""
+    def handle(cmd: str) -> Optional[str]:
+        if cmd == "kill":
+            with open(cfg.risk.kill_file, "w") as f:
+                f.write(f"phone {time.ctime()}\n")
+            engine.poke()
+            return "KILL set: cancelling all orders, no new trades"
+        if cmd == "resume":
+            if os.path.exists(cfg.risk.kill_file):
+                os.remove(cfg.risk.kill_file)
+            halted = engine.risk.state.halt_reason if engine.risk.state.halted else ""
+            return "KILL cleared" + (f"; still halted ({halted}): clear over SSH" if halted else "")
+        if cmd == "status":
+            a = engine.last_acct
+            pos = ", ".join(f"{k} {v:+.0f}" for k, v in sorted((a.positions if a else {}).items())[:15])
+            return (f"equity {engine.last_equity:,.0f}  cash {a.cash if a else 0:,.0f}  "
+                    f"kill {'ON' if os.path.exists(cfg.risk.kill_file) else 'off'}  "
+                    f"halted {engine.risk.state.halted}\n{pos}\nlast error: {engine.last_error or 'none'}")
+        return None
+    return handle
 
 
 async def _calls_when_due(cfg: BotConfig, feeds: "LiveFeeds", engine: Engine) -> None:

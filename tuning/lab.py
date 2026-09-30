@@ -152,6 +152,8 @@ def load_pairs(res):
             ps = lv.get(("poly", m.get("poly_token")), [])
             if m.get("poly_invert"):
                 ps = [(t, 1 - p, s) for t, p, s in ps]
+            if m.get("kalshi_invert"):
+                ks = [(t, 1 - p, s) for t, p, s in ks]
             pairs.append((m["id"], resample(ks, step), resample(ps, step), step))
         return pairs
     step = 60 if res == "1m" else 3600
@@ -165,6 +167,8 @@ def load_pairs(res):
         ps = load_poly(pp) if m.get("poly_slug") and os.path.exists(pp) else []
         if m.get("poly_invert"):
             ps = [(t, 1 - p, s) for t, p, s in ps]
+        if m.get("kalshi_invert"):
+            ks = [(t, 1 - p, s) for t, p, s in ks]
         kg, pg = resample(ks, step), resample(ps, step)
         pairs.append((m["id"], kg, pg, step))
     return pairs

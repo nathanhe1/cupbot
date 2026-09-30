@@ -21,7 +21,7 @@ import json
 import time
 from typing import Callable, Dict, Optional
 
-from .mathutil import logit_blend
+from .mathutil import logit, logit_blend
 
 try:
     import aiohttp
@@ -65,6 +65,19 @@ class AnchorBook:
             ps = [p for p, ts in venues.values() if now - ts <= self.max_age_s]
             if ps:
                 out[mid] = logit_blend(ps, [1.0] * len(ps))
+        return out
+
+    def disagreement(self) -> Dict[str, float]:
+        """Log-odds gap between venues per market (0 with one venue). Real data on Sep 30
+        showed persistent 2-3 cent Kalshi/Polymarket gaps in some races; the fair value
+        treats that gap as extra uncertainty in the anchor."""
+        now = time.time()
+        out = {}
+        for mid, venues in self.quotes.items():
+            ps = [p for p, ts in venues.values() if now - ts <= self.max_age_s]
+            if len(ps) >= 2:
+                ls = [logit(p) for p in ps]
+                out[mid] = max(ls) - min(ls)
         return out
 
 

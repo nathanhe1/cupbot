@@ -51,11 +51,11 @@ def main(argv=None) -> int:
     dm = sub.add_parser("draft-map")
     dm.add_argument("--out", default="config/market_map.json")
     sub.add_parser("preflight")
+    sub.add_parser("status")
     rc = sub.add_parser("record")
     rc.add_argument("--interval", type=float, default=2.0)
     rc.add_argument("--minutes", type=float, default=None)
-    tr = sub.add_parser("tick-report")
-    tr.add_argument("--dir", default="journal/ticks")
+
     sub.add_parser("kill")
     sub.add_parser("unkill")
     sub.add_parser("cancel-all")
@@ -154,9 +154,25 @@ def main(argv=None) -> int:
         record(a.interval, a.minutes)
         return 0
 
-    if a.cmd == "tick-report":
-        from .tickstats import report
-        print(report(a.dir))
+    if a.cmd == "status":
+        import json as _json
+        import sqlite3
+        print(f"kill switch: {'ON' if os.path.exists(cfg.risk.kill_file) else 'off'}")
+        if not os.path.exists(cfg.journal_path):
+            print("no journal yet")
+            return 0
+        db = sqlite3.connect(cfg.journal_path)
+        for kind in ("start", "stop", "halt", "kill", "error", "basket"):
+            row = db.execute("SELECT ts, data FROM events WHERE kind=? ORDER BY ts DESC LIMIT 1", (kind,)).fetchone()
+            if row:
+                print(f"last {kind:<6} {time.ctime(row[0])}  {row[1][:160]}")
+        n = db.execute("SELECT COUNT(*) FROM events WHERE kind='order' AND ts > ?", (time.time() - 86400,)).fetchone()[0]
+        d = db.execute("SELECT COUNT(*) FROM events WHERE kind='dry_order' AND ts > ?", (time.time() - 86400,)).fetchone()[0]
+        print(f"orders in last 24h: {n} sent, {d} dry-run")
+        for ts, data in db.execute("SELECT ts, data FROM events WHERE kind IN ('order','dry_order') ORDER BY ts DESC LIMIT 5"):
+            o = _json.loads(data)
+            print(f"  {time.strftime('%m-%d %H:%M:%S', time.localtime(ts))} {o.get('side')} {o.get('qty')} "
+                  f"{o.get('market')} @ {o.get('price')} filled {o.get('filled', '-')}  {o.get('reason', '')[:50]}")
         return 0
 
     if a.cmd == "preflight":

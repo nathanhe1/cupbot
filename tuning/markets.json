@@ -1,5 +1,5 @@
 {
- "_README": "Generated from ../data/anchors_2026.json. poly_invert true = token is the Republican YES; Dem price = 1 - price.",
+ "_README": "Generated from ../data/anchors_2026.json. *_invert true = the ticker/token is the Republican YES; Dem-side price = 1 - price. Three-way races use the Republican side at both venues.",
  "markets": [
   {
    "id": "SEN-AK",
@@ -67,8 +67,8 @@
   },
   {
    "id": "SEN-ID",
-   "kalshi": "SENATEID-26-D",
-   "kalshi_invert": false,
+   "kalshi": "SENATEID-26-R",
+   "kalshi_invert": true,
    "poly_slug": null,
    "poly_token": "6756779810577885828704276397389282544084821591107025125954859235939281991675",
    "poly_invert": true
@@ -147,8 +147,8 @@
   },
   {
    "id": "SEN-MT",
-   "kalshi": "SENATEMT-26-D",
-   "kalshi_invert": false,
+   "kalshi": "SENATEMT-26-R",
+   "kalshi_invert": true,
    "poly_slug": null,
    "poly_token": "102325039069045369431277041414667266705633344716966967751024692805337688459829",
    "poly_invert": true
@@ -163,8 +163,8 @@
   },
   {
    "id": "SEN-NE",
-   "kalshi": "SENATENE-26-D",
-   "kalshi_invert": false,
+   "kalshi": "SENATENE-26-R",
+   "kalshi_invert": true,
    "poly_slug": null,
    "poly_token": "92576281548134350814800877416860562553699794074017301653635964206220838638047",
    "poly_invert": true
@@ -235,8 +235,8 @@
   },
   {
    "id": "SEN-SD",
-   "kalshi": "SENATESD-26-D",
-   "kalshi_invert": false,
+   "kalshi": "SENATESD-26-R",
+   "kalshi_invert": true,
    "poly_slug": null,
    "poly_token": "90757273431062483956880101601137522271949785755347720675502304224330457712154",
    "poly_invert": true
