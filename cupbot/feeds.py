@@ -24,7 +24,11 @@ class Feeds(abc.ABC):
         """market_id -> P(YES) from external real-money venues."""
 
     def anchor_disagreement(self) -> Dict[str, float]:
-        """market_id -> log-odds gap between anchor venues (0 or missing = one venue)."""
+        """market_id -> probability gap between anchor venues (missing = one venue)."""
+        return {}
+
+    def anchor_moves(self) -> Dict[str, float]:
+        """market_id -> change of the anchor mid over the last ~2 minutes (prob)."""
         return {}
 
     @abc.abstractmethod

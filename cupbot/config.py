@@ -27,12 +27,16 @@ class FairValueConfig:
 @dataclass
 class StrategyConfig:
     min_edge: float = 0.02           # minimum edge after crossing the spread (prob points)
+    gap_buffer: float = 0.01         # ...and at least (Kalshi-Polymarket gap + this) on static trades
+    lag_min_edge: float = 0.015      # when the anchor just moved >= 2 ticks and the Cup hasn't followed
+    lag_move: float = 0.02           # anchor move (prob, within ~2 min) that counts as "just moved"
     uncertainty_mult: float = 0.5    # extra edge required per unit of fair-value uncertainty
     kelly_mult: float = 1.0          # full Kelly on the blended fair (sim-tuned; halve if week-one calibration is worse)
-    max_market_frac: float = 0.15    # max notional in one market, fraction of equity
+    max_market_frac: float = 0.20    # max notional in one market, fraction of equity
     max_order_frac: float = 0.05     # max notional per order
-    jump_damp: float = 0.5           # size multiplier on the first tick after a big fair-value jump
-    jump_threshold: float = 0.05
+    jump_damp: float = 0.5           # first move: take this share of target size...
+    jump_threshold: float = 0.02     # ...when fair value jumps by at least this (2 ticks)
+    settle_s: float = 90.0           # ...and add the rest after this long only if half the move still holds
     recycle_price: float = 0.95      # election night: sell called winners at or above this bid
     recycle_min_alt_edge: float = 0.05  # ...if a better use of the cash exists
     combo_arb_margin: float = 0.02   # mutually exclusive sets: trade if prices sum off 1 by this

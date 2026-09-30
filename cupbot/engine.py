@@ -62,6 +62,7 @@ class Engine:
         self.tournament_p = 0.0
         self._field_prices: Optional[Dict[str, float]] = None
         self._logged_calls = set()
+        self._moves: Dict[str, tuple] = {}   # market -> (t0, fair before, fair after) of last jump
         self._acct: Optional[Account] = None
         self._acct_t = 0.0
         self.last_equity = 0.0
@@ -219,6 +220,29 @@ class Engine:
                                              reason=f"basket: {self.basket['name']}"))
         return keep
 
+    def _first_move_damp(self, now: float, fairs: Dict[str, FairQuote]) -> Dict[str, float]:
+        """Half size on a fresh fair-value move; full size once it has held at least half
+        of the move for settle_s; stays at half if it gave back more (moves expire after 1 h)."""
+        c = self.cfg.strategy
+        out: Dict[str, float] = {}
+        for mid, fq in fairs.items():
+            prev = self.prev_fairs.get(mid)
+            if prev is not None and abs(fq.p - prev.p) >= c.jump_threshold:
+                self._moves[mid] = (now, prev.p, fq.p)
+            mv = self._moves.get(mid)
+            if mv is None:
+                continue
+            t0, before, after = mv
+            if now - t0 > 3600:
+                del self._moves[mid]
+                continue
+            if now - t0 < c.settle_s:
+                out[mid] = c.jump_damp
+            else:
+                held = (fq.p - before) / (after - before) if after != before else 1.0
+                out[mid] = 1.0 if held >= 0.5 else c.jump_damp
+        return out
+
     async def _resolve_unknown(self) -> None:
         """Orders whose create timed out: ask the venue what happened, by client id."""
         if not self.unknown or not hasattr(self.ex, "lookup_order"):
@@ -283,7 +307,11 @@ class Engine:
         fairs = self.fair.compute(now, model_pd, self.feeds.anchors(), mids, live)
 
         self._tournament_scale(phase, acct, marks, equity)
-        orders = self.strategy.decide(fairs, books, acct, equity, phase, self.prev_fairs, self.kelly_scale)
+        gaps = self.feeds.anchor_disagreement()
+        moves = self.feeds.anchor_moves()
+        damp = self._first_move_damp(now, fairs)
+        orders = self.strategy.decide(fairs, books, acct, equity, phase, self.prev_fairs, self.kelly_scale,
+                                      venue_gap=gaps, anchor_moves=moves, damp=damp)
         orders = self._basket_orders(now, phase, fairs, books, acct, marks, equity, orders)
         if self.cfg.strategy.passive_quotes:
             await self.ex.cancel_all()

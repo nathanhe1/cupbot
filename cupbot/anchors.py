@@ -17,6 +17,7 @@ Every update calls `on_change(market_id)` so the engine can reprice at once."""
 from __future__ import annotations
 
 import asyncio
+import collections
 import json
 import time
 from typing import Callable, Dict, Optional
@@ -36,25 +37,43 @@ POLY_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 class AnchorBook:
     """Latest price per (cup market, venue), with timestamps."""
 
-    def __init__(self, max_age_s: float = 120.0, max_spread: float = 0.06):
+    def __init__(self, max_age_s: float = 60.0, max_spread: float = 0.06):
         self.max_age_s = max_age_s
         self.max_spread = max_spread
         self.quotes: Dict[str, Dict[str, tuple]] = {}   # mid -> venue -> (p, ts)
         self.on_change: Optional[Callable[[str], None]] = None
+        self.move_window_s = 120.0
+        self.history: Dict[str, "collections.deque"] = {}
+
+    def _blend(self, mid: str, now: float) -> Optional[float]:
+        ps = [p for p, ts in self.quotes.get(mid, {}).values() if now - ts <= self.max_age_s]
+        return logit_blend(ps, [1.0] * len(ps)) if ps else None
+
+    def recent_moves(self) -> Dict[str, float]:
+        """market -> change of the blended anchor mid over the last move_window_s (prob)."""
+        out = {}
+        for mid, h in self.history.items():
+            vals = [v for _, v in h if v is not None]
+            if len(vals) >= 2:
+                out[mid] = vals[-1] - vals[0]
+        return out
 
     def update(self, market_id: str, venue: str, bid: Optional[float], ask: Optional[float],
                last: Optional[float] = None, invert: bool = False) -> None:
-        p = None
-        if bid is not None and ask is not None and 0 < bid <= ask < 1 and ask - bid <= self.max_spread:
-            p = (bid + ask) / 2
-        elif last is not None and 0 < last < 1:
-            p = last
-        if p is None:
+        # quote mid only: trade prints overshoot by 1-2 cents and half-retrace within
+        # minutes (tuning/RECOMMENDATIONS.md, finding 5), so `last` is ignored
+        if not (bid is not None and ask is not None and 0 < bid <= ask < 1 and ask - bid <= self.max_spread):
             return
+        p = (bid + ask) / 2
         if invert:
             p = 1 - p
         prev = self.quotes.get(market_id, {}).get(venue)
-        self.quotes.setdefault(market_id, {})[venue] = (p, time.time())
+        now = time.time()
+        self.quotes.setdefault(market_id, {})[venue] = (p, now)
+        h = self.history.setdefault(market_id, collections.deque())
+        h.append((now, self._blend(market_id, now)))
+        while h and h[0][0] < now - self.move_window_s:
+            h.popleft()
         if self.on_change and (prev is None or abs(prev[0] - p) >= 0.005):
             self.on_change(market_id)
 
@@ -68,16 +87,15 @@ class AnchorBook:
         return out
 
     def disagreement(self) -> Dict[str, float]:
-        """Log-odds gap between venues per market (0 with one venue). Real data on Sep 30
-        showed persistent 2-3 cent Kalshi/Polymarket gaps in some races; the fair value
-        treats that gap as extra uncertainty in the anchor."""
+        """Probability gap between venues per market (missing with one venue). Kalshi prices
+        the Democratic side 1-3 points below Polymarket almost everywhere and the gap
+        persists for hours, so it is noise to trade around, not signal."""
         now = time.time()
         out = {}
         for mid, venues in self.quotes.items():
             ps = [p for p, ts in venues.values() if now - ts <= self.max_age_s]
             if len(ps) >= 2:
-                ls = [logit(p) for p in ps]
-                out[mid] = max(ls) - min(ls)
+                out[mid] = max(ps) - min(ps)
         return out
 
 

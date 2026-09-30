@@ -143,6 +143,18 @@ real Cup market maker is as slow or as biased as the simulated one; the bot only
 because the simulator was built with those edges. The week-one `measure-mm` data is what tells you which
 sweep row looks like reality.
 
+### After folding in the real-data tuning (Sep 30 evening, 40 contests per row)
+
+Edge rules from 30 days of Kalshi/Polymarket history (`tuning/RECOMMENDATIONS.md`): trade only past
+max(2 points, venue gap + 1), 1.5 points when the anchor has just moved; quote mids only; half size on a
+fresh move, the rest after 90 s if it holds; 20% per-market cap at full Kelly.
+
+| Scenario | Median result | P(loss) | P(2x) | P(top 3) |
+|---|---|---|---|---|
+| Default assumptions | 1.39x (was 1.27x) | 2% (was 12%) | 0% | 0% |
+| MM reprices with no lag | 1.02x | 45% | 0% | 0% |
+| Deep MM | 1.65x | 8% | 10% | 2% |
+
 ### Results with real market priors (Sep 30 build, 40 contests per row)
 
 After `refresh-priors` the race priors match Kalshi/Polymarket (Senate D about 62%, House D about 92%). Real

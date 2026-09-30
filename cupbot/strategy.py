@@ -5,8 +5,8 @@ Deterministic, no LLM, no I/O. Rules, in order:
      Threshold = min_edge + uncertainty_mult * fair-value uncertainty. The limit
      price is the worst price that still clears the threshold, so the order sweeps
      stale student orders and stops before the edge is gone. Size = fractional
-     Kelly, capped per market and per order, and damped on the first tick after a
-     big fair-value jump ("take first moves small").
+     Kelly, capped per market and per order. After a fair-value jump the target is
+     halved until the move has held for settle_s ("take first moves small").
   2. Exit when a position's edge has reversed by more than exit_edge.
   3. Election night capital recycling: sell near-certain winners (bid >= recycle_price)
      when there is a better use for the cash elsewhere.
@@ -49,9 +49,25 @@ class Strategy:
             return c.final_week_kelly_mult, c.final_week_max_market_frac, c.min_edge
         return c.kelly_mult, c.max_market_frac, c.min_edge
 
+    def threshold(self, mid: str, fq: FairQuote, min_edge: float, venue_gap=None, anchor_moves=None) -> float:
+        """Edge needed to trade. Real-data rules (tuning/RECOMMENDATIONS.md):
+        lag trade (the anchor just moved >= 2 ticks): lag_min_edge;
+        otherwise max(min_edge, Kalshi-Polymarket gap + gap_buffer). Plus a share of the
+        fair value's own uncertainty."""
+        c = self.cfg
+        moved = (anchor_moves or {}).get(mid, 0.0)
+        if abs(moved) >= c.lag_move and ("anchor" in fq.parts or not fq.parts):
+            base = min(min_edge, c.lag_min_edge)
+        else:
+            base = max(min_edge, (venue_gap or {}).get(mid, 0.0) + c.gap_buffer) \
+                if (venue_gap or {}).get(mid) is not None else min_edge
+        return base + c.uncertainty_mult * fq.unc
+
     def decide(self, fairs: Dict[str, FairQuote], books: BookMap, acct: Account, equity: float,
                phase: str, prev_fairs: Optional[Dict[str, FairQuote]] = None,
-               kelly_scale: float = 1.0) -> List[OrderRequest]:
+               kelly_scale: float = 1.0, venue_gap: Optional[Dict[str, float]] = None,
+               anchor_moves: Optional[Dict[str, float]] = None,
+               damp: Optional[Dict[str, float]] = None) -> List[OrderRequest]:
         c = self.cfg
         if phase == "closed" or equity <= 0:
             return []
@@ -78,9 +94,12 @@ class Strategy:
             if book is None or m is None or m.closed:
                 continue
             pos = acct.pos(mid)
-            thr = min_edge + c.uncertainty_mult * fq.unc
-            prev = prev_fairs.get(mid)
-            damp = c.jump_damp if prev is not None and abs(fq.p - prev.p) > c.jump_threshold else 1.0
+            thr = self.threshold(mid, fq, min_edge, venue_gap, anchor_moves)
+            if damp is not None:
+                size_mult = damp.get(mid, 1.0)
+            else:
+                prev = prev_fairs.get(mid)
+                size_mult = c.jump_damp if prev is not None and abs(fq.p - prev.p) > c.jump_threshold else 1.0
             ask, bid = book.best_ask, book.best_bid
             max_order = c.max_order_frac * equity
 
@@ -89,9 +108,9 @@ class Strategy:
                 limit = floor_tick(fq.p - thr)
                 if limit >= ask - 1e-9:
                     f = min(kmult * kelly_yes(fq.p, limit), mfrac)
-                    target_qty = f * equity / limit
+                    target_qty = f * equity / limit * size_mult
                     want = target_qty - max(pos, 0.0) + max(-pos, 0.0)
-                    qty = min(want, book.depth_to(Side.BUY, limit), max_order / limit) * damp
+                    qty = min(want, book.depth_to(Side.BUY, limit), max_order / limit)
                     if qty >= MIN_QTY:
                         orders.append(OrderRequest(mid, Side.BUY, math.floor(qty), limit,
                                                    reason=f"take: fair {fq.p:.3f} ask {ask:.2f} thr {thr:.3f}"))
@@ -101,9 +120,9 @@ class Strategy:
                 limit = ceil_tick(fq.p + thr)
                 if limit <= bid + 1e-9:
                     f = min(kmult * kelly_no(fq.p, limit), mfrac)
-                    target_qty = f * equity / (1 - limit)
+                    target_qty = f * equity / (1 - limit) * size_mult
                     want = target_qty - max(-pos, 0.0) + max(pos, 0.0)
-                    qty = min(want, book.depth_to(Side.SELL, limit), max_order / (1 - limit)) * damp
+                    qty = min(want, book.depth_to(Side.SELL, limit), max_order / (1 - limit))
                     if qty >= MIN_QTY:
                         orders.append(OrderRequest(mid, Side.SELL, math.floor(qty), limit,
                                                    reason=f"take: fair {fq.p:.3f} bid {bid:.2f} thr {thr:.3f}"))

@@ -242,6 +242,26 @@ class TestStrategy(unittest.TestCase):
         self.assertEqual(o[0].side, Side.SELL)
         self.assertAlmostEqual(o[0].price, 0.33)
 
+    def test_threshold_rules(self):
+        s = Strategy(StrategyConfig(min_edge=0.02, gap_buffer=0.01, lag_min_edge=0.015, lag_move=0.02,
+                                    uncertainty_mult=0.0), self.markets)
+        fq = FairQuote(0.6, 0.0, {"anchor": 0.6})
+        self.assertAlmostEqual(s.threshold("A", fq, 0.02), 0.02)
+        self.assertAlmostEqual(s.threshold("A", fq, 0.02, venue_gap={"A": 0.03}), 0.04)       # gap + 1
+        self.assertAlmostEqual(s.threshold("A", fq, 0.02, venue_gap={"A": 0.03},
+                                           anchor_moves={"A": 0.025}), 0.015)                  # lag trade
+
+    def test_first_move_halves_target_not_each_order(self):
+        o = self.s.decide({"A": FairQuote(0.70, 0.0)}, {"A": self.book(0.55, 0.60, qty=1e6)},
+                          Account(10000, {"A": 0}), 10000, "pre", damp={"A": 0.5})
+        full = self.s.decide({"A": FairQuote(0.70, 0.0)}, {"A": self.book(0.55, 0.60, qty=1e6)},
+                             Account(10000, {"A": 0}), 10000, "pre", damp={})
+        # with a position already at the halved target, no more is bought until damp lifts
+        held = self.s.decide({"A": FairQuote(0.70, 0.0)}, {"A": self.book(0.55, 0.60, qty=1e6)},
+                             Account(10000, {"A": o[0].qty + 5}), 10000, "pre", damp={"A": 0.5})
+        self.assertLessEqual(o[0].qty, full[0].qty)
+        self.assertEqual([x for x in held if x.side == Side.BUY], [])
+
     def test_recycle_on_night(self):
         books = {"A": self.book(0.96, 0.98), "B": self.book(0.40, 0.42, mid="B")}
         fairs = {"A": FairQuote(0.985, 0.0), "B": FairQuote(0.60, 0.0)}

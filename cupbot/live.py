@@ -71,6 +71,9 @@ class LiveFeeds(Feeds):
     def anchor_disagreement(self) -> Dict[str, float]:
         return self.anchor_book.disagreement()
 
+    def anchor_moves(self) -> Dict[str, float]:
+        return self.anchor_book.recent_moves()
+
     def poll_means(self) -> Dict[str, float]:
         # re-read so you can edit data/races_2026.json while the bot runs
         with open(self.races_file) as f:
