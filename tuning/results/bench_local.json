@@ -1,0 +1,11 @@
+{
+ "fake_rtt_ms": 10.0,
+ "order_cold_ms": 40.281,
+ "order_warm_ms": 13.03,
+ "build_json_us": 8.32,
+ "build_template_us": 0.23,
+ "decision_us": 0.37,
+ "parse_ws_msg_us": 2.66,
+ "order_behind_slow_read_shared_conn_ms": 217.175,
+ "order_dedicated_conn_ms": 13.058
+}

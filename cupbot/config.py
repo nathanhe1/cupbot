@@ -123,6 +123,8 @@ class BotConfig:
     races_file: str = "data/races_2026.json"
     market_map_file: str = "config/market_map.json"
     loop_interval_s: float = 2.0
+    account_refresh_s: float = 10.0   # re-read balance/positions from the venue this often; between
+                                      # refreshes the engine tracks them from its own fills (0 = every step)
     open_ts: float = 1790870400.0      # 2026-10-01 16:00 UTC (noon ET)
     election_ts: float = 1793746800.0  # 2026-11-03 23:00 UTC (6pm ET, first polls close)
     journal_path: str = "journal/journal.sqlite"

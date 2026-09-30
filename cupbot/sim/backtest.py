@@ -97,6 +97,7 @@ def run_one(seed: int, sim: Optional[SimParams] = None, cfg: Optional[BotConfig]
     cfg = copy.deepcopy(cfg) if cfg else BotConfig()
     world = SimWorld(races, sim)
     cfg.open_ts, cfg.election_ts = 0.0, world.pre_ticks * TICK_S
+    cfg.account_refresh_s = 0.0
     model = RaceModel.from_json(races, ModelParams(n_draws=1000, seed=seed + 1000))
     eng = Engine(cfg, world.exchange, world, model, world.markets)
     eng.fair.consistency = RaceModel.from_json(races, ModelParams(n_draws=800, seed=seed + 2000))

@@ -25,7 +25,7 @@ class FakeCup(SuperMarketExchange):
         self.routes = routes
         self.sent = []
 
-    async def _send(self, method, url, params, json_body, headers):
+    async def _send(self, method, url, params, json_body, headers, write=False):
         self.sent.append((method, url, params, json_body, headers))
         path = url.replace(self.cfg.base_url, "")
         r = self.routes[(method, path)]
@@ -137,6 +137,21 @@ class TestAnchorsAndDiscovery(unittest.TestCase):
         ab.update("x", "kalshi", 0.2, 0.5)                          # too wide, no last -> ignored
         self.assertNotIn("x", ab.latest())
         self.assertEqual(seen, ["m", "m"])
+
+    def test_polymarket_price_change_message(self):
+        # real message shape recorded from the public market websocket on Sep 30
+        from cupbot.anchors import AnchorFeed
+        ab = AnchorBook()
+        feed = AnchorFeed.__new__(AnchorFeed)
+        feed.book = ab
+        tokens = {"T1": ("m1", False), "T2": ("m2", True)}
+        msg = {"market": "0x81", "event_type": "price_change", "timestamp": "1790803422968", "price_changes": [
+            {"asset_id": "T1", "price": "0.012", "size": "0", "side": "BUY", "best_bid": "0.056", "best_ask": "0.067"},
+            {"asset_id": "T2", "price": "0.988", "size": "0", "side": "SELL", "best_bid": "0.933", "best_ask": "0.944"}]}
+        feed._poly_event(msg, tokens, {})
+        got = ab.latest()
+        self.assertAlmostEqual(got["m1"], 0.0615, places=4)
+        self.assertAlmostEqual(got["m2"], 1 - 0.9385, places=4)
 
     def test_kalshi_price_formats(self):
         self.assertAlmostEqual(_cents_or_dollars({"yes_bid": 41}, "yes_bid"), 0.41)

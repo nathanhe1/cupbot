@@ -62,6 +62,8 @@ class Engine:
         self.tournament_p = 0.0
         self._field_prices: Optional[Dict[str, float]] = None
         self._logged_calls = set()
+        self._acct: Optional[Account] = None
+        self._acct_t = 0.0
         self.unknown: Dict[str, str] = {}       # client_id -> market_id of timed-out creates
         self._unknown_tries: Dict[str, int] = {}
         self.basket: Optional[Dict] = None      # {"name", "frac", "p", "targets": {mid: signed qty}}
@@ -247,8 +249,13 @@ class Engine:
 
         await self._resolve_unknown()
         live_ids = [m for m, mk in self.markets.items() if not mk.closed]
-        books = await self.ex.get_books(live_ids)
-        acct = await self.ex.get_account()
+        refresh = self.cfg.account_refresh_s
+        if self._acct is None or refresh <= 0 or time.time() - self._acct_t >= refresh:
+            books, acct = await asyncio.gather(self.ex.get_books(live_ids), self.ex.get_account())
+            self._acct, self._acct_t = acct, time.time()
+        else:
+            books = await self.ex.get_books(live_ids)
+            acct = self._acct   # tracked locally from fills until the next refresh
         marks = dict(self.last_marks)
         mids: Dict[str, float] = {}
         for mid, b in books.items():

@@ -51,6 +51,11 @@ def main(argv=None) -> int:
     dm = sub.add_parser("draft-map")
     dm.add_argument("--out", default="config/market_map.json")
     sub.add_parser("preflight")
+    rc = sub.add_parser("record")
+    rc.add_argument("--interval", type=float, default=2.0)
+    rc.add_argument("--minutes", type=float, default=None)
+    tr = sub.add_parser("tick-report")
+    tr.add_argument("--dir", default="journal/ticks")
     sub.add_parser("kill")
     sub.add_parser("unkill")
     sub.add_parser("cancel-all")
@@ -144,6 +149,16 @@ def main(argv=None) -> int:
         from .live import draft_market_map
         return asyncio.run(draft_market_map(cfg, a.out))
 
+    if a.cmd == "record":
+        from .recorder import record
+        record(a.interval, a.minutes)
+        return 0
+
+    if a.cmd == "tick-report":
+        from .tickstats import report
+        print(report(a.dir))
+        return 0
+
     if a.cmd == "preflight":
         from .live import preflight
         return asyncio.run(preflight(cfg))
@@ -182,6 +197,7 @@ async def _paper(cfg, seed: int, speed: float, quiet: bool) -> int:
     from .sim.world import TICK_S, SimParams, SimWorld
     world = SimWorld(cfg.races_file, SimParams(seed=seed))
     cfg.open_ts, cfg.election_ts = 0.0, world.pre_ticks * TICK_S
+    cfg.account_refresh_s = 0.0
     model = RaceModel.from_json(cfg.races_file, ModelParams(n_draws=2000))
     journal = Journal("journal/paper.sqlite")
     eng = Engine(cfg, world.exchange, world, model, world.markets, journal=journal)

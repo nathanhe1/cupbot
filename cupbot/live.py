@@ -121,6 +121,7 @@ async def run_live(cfg: BotConfig, live_orders: bool, run_seconds: Optional[floa
     print(f"running {'LIVE' if live_orders else 'DRY-RUN'} on {len(markets)} markets; journal {cfg.journal_path}")
     anchor_task = asyncio.ensure_future(feed.run())
     calls_task = asyncio.ensure_future(_calls_when_due(cfg, feeds, engine))
+    warm_task = asyncio.ensure_future(ex.keep_warm()) if live_orders else None
     try:
         await engine.run(stop_after_s=run_seconds)
     finally:
@@ -132,6 +133,8 @@ async def run_live(cfg: BotConfig, live_orders: bool, run_seconds: Optional[floa
                 print(f"WARNING: cancel on shutdown failed ({e}); run `python -m cupbot cancel-all`")
         anchor_task.cancel()
         calls_task.cancel()
+        if warm_task:
+            warm_task.cancel()
         await feed.close()
         await ex.close()
         journal.close()

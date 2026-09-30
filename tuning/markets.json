@@ -1,0 +1,301 @@
+{
+ "_README": "Generated from ../data/anchors_2026.json. poly_invert true = token is the Republican YES; Dem price = 1 - price.",
+ "markets": [
+  {
+   "id": "SEN-AK",
+   "kalshi": "SENATEAK-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": null,
+   "poly_invert": false
+  },
+  {
+   "id": "SEN-AL",
+   "kalshi": "SENATEAL-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": null,
+   "poly_invert": false
+  },
+  {
+   "id": "SEN-AR",
+   "kalshi": "SENATEAR-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "48125407658537781630126353551882211313520827583468729408685633955919030034320",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-CO",
+   "kalshi": "SENATECO-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "94387913280398317052582281843978069916338462525042652614881277797162415545237",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-DE",
+   "kalshi": "SENATEDE-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "18791277393217683755628516529477058015186638022373024614300661393042993809537",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-FL",
+   "kalshi": "SENATEFLS-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "47848555635748009983462962481545341194026880518141560747711492227563791266566",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-GA",
+   "kalshi": "SENATEGA-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "43777191461245536274027792855557351629362906569064322165760098912770293918104",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-IA",
+   "kalshi": "SENATEIA-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "107844449523890311740907586041395758413047559802389895859202256336422357556837",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-ID",
+   "kalshi": "SENATEID-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "6756779810577885828704276397389282544084821591107025125954859235939281991675",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-IL",
+   "kalshi": "SENATEIL-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "28293677056280080359554222049156424637171556977737746792223933800049748849083",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-KS",
+   "kalshi": "SENATEKS-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "18131974965869813060047290511060211742274666573066200470724290584768041211203",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-KY",
+   "kalshi": null,
+   "kalshi_invert": true,
+   "poly_slug": null,
+   "poly_token": "48498511771232100148522166869811267217315069499419645745771730197179043728388",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-LA",
+   "kalshi": "SENATELA-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "79597156840177168343562124064866301094619106642263695929345529947536386203124",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-MA",
+   "kalshi": "SENATEMA-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "94720102345103978732985991591541449349105398685307981352929740529082927790385",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-ME",
+   "kalshi": "SENATEME-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "2142948285506077695096498341598672159464223074468931276310105532825810210121",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-MI",
+   "kalshi": "SENATEMI-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "1046980875306043125128331871114794349002409233139736033870402475326170083426",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-MN",
+   "kalshi": "SENATEMN-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "70179930004460104520571721963263381325865077807861641105900318902168490512539",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-MS",
+   "kalshi": "SENATEMS-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "36589074670521348842786325911391532620430247097981345860356484520500173888573",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-MT",
+   "kalshi": "SENATEMT-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "102325039069045369431277041414667266705633344716966967751024692805337688459829",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-NC",
+   "kalshi": "SENATENC-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "62831517509825405761763142539845746280269675872170259538293560849475982647892",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-NE",
+   "kalshi": "SENATENE-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "92576281548134350814800877416860562553699794074017301653635964206220838638047",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-NH",
+   "kalshi": "SENATENH-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "62227089537100115269143206481757249285124282589590263790284791475153705872216",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-NJ",
+   "kalshi": "SENATENJ-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "80469582416211324277551196813384851504222711072116234686695188046152640511225",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-NM",
+   "kalshi": "SENATENM-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "47410821361368319377218522333433306313753572972827491807608363074924233552004",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-OH",
+   "kalshi": "SENATEOHS-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "69908185249078099348466099388148864764525845923415294308139153388799352317616",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-OK",
+   "kalshi": "SENATEOK-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "83554519035704522672644117478876258278018394754028161940314277335853541553559",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-OR",
+   "kalshi": "SENATEOR-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "79489800771199803792838465972773376352837733018768490302999836500381020065853",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-RI",
+   "kalshi": "SENATERI-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "18128207363125529330540526475108389147728645885887417700651189282375630645842",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-SC",
+   "kalshi": "SENATESC-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "84368524152268016512433556151474175385160499638069024812438264090070245734708",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-SD",
+   "kalshi": "SENATESD-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "90757273431062483956880101601137522271949785755347720675502304224330457712154",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-TN",
+   "kalshi": "SENATETN-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "23982348354062524972887126807952244605287433791462351968680411830837664790435",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-TX",
+   "kalshi": "SENATETX-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "21265207456609426291246075480390336499088453711419597084147957999650569091884",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-VA",
+   "kalshi": "SENATEVA-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "30879673422883665658998557649780314115615509792114924412311244164523672753717",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-WV",
+   "kalshi": "SENATEWV-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "103563721501446582736235672026641229118201717908465299005521462931975944512517",
+   "poly_invert": true
+  },
+  {
+   "id": "SEN-WY",
+   "kalshi": "SENATEWY-26-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "79928077180713102609948647660034580156932658823394290272651325523866637424642",
+   "poly_invert": true
+  },
+  {
+   "id": "SENATE_D",
+   "kalshi": "CONTROLS-2026-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "113287701564209339913693347405685749986285999146352375265161592243948562084773",
+   "poly_invert": false
+  },
+  {
+   "id": "HOUSE_D",
+   "kalshi": "CONTROLH-2026-D",
+   "kalshi_invert": false,
+   "poly_slug": null,
+   "poly_token": "83247781037352156539108067944461291821683755894607244160607042790356561625563",
+   "poly_invert": false
+  }
+ ]
+}

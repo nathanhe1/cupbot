@@ -84,22 +84,25 @@ class AnchorFeed:
 
     # ------------------------------------------------------------ Kalshi REST
     async def poll_kalshi_once(self) -> None:
+        """All mapped Kalshi markets in one batched request (GET /markets?tickers=...)."""
         sess = await self._sess()
-        for mid, m in self.mapping.items():
-            k = m.get("kalshi")
-            if not k or not k.get("ticker"):
-                continue
+        by_ticker = {m["kalshi"]["ticker"]: (mid, m["kalshi"].get("invert", False))
+                     for mid, m in self.mapping.items() if (m.get("kalshi") or {}).get("ticker")}
+        tickers = list(by_ticker)
+        for i in range(0, len(tickers), 50):
             try:
-                async with sess.get(f"{KALSHI_REST}/markets/{k['ticker']}") as r:
+                async with sess.get(f"{KALSHI_REST}/markets", params={"tickers": ",".join(tickers[i:i + 50])}) as r:
                     if r.status != 200:
                         continue
-                    body = (await r.json()).get("market", {})
+                    body = await r.json()
             except Exception:
                 continue
-            bid = _cents_or_dollars(body, "yes_bid")
-            ask = _cents_or_dollars(body, "yes_ask")
-            last = _cents_or_dollars(body, "last_price")
-            self.book.update(mid, "kalshi", bid, ask, last, invert=k.get("invert", False))
+            for mk in body.get("markets", []):
+                if mk.get("ticker") not in by_ticker:
+                    continue
+                mid, inv = by_ticker[mk["ticker"]]
+                self.book.update(mid, "kalshi", _cents_or_dollars(mk, "yes_bid"), _cents_or_dollars(mk, "yes_ask"),
+                                 _cents_or_dollars(mk, "last_price"), invert=inv)
 
     async def run_kalshi_polling(self) -> None:
         while True:
@@ -128,54 +131,75 @@ class AnchorFeed:
                 await asyncio.sleep(2)  # reconnect; REST polling below covers the gap
 
     def _poly_event(self, ev: dict, tokens, best) -> None:
-        tid = ev.get("asset_id")
+        """Handle one market-channel message. `book` carries asset_id at the top level;
+        `price_change` carries a list of per-asset changes, each with best_bid / best_ask
+        (format checked against recorded messages in tuning/data/live)."""
+        kind = ev.get("event_type")
+        if kind == "book":
+            self._poly_set(ev.get("asset_id"), tokens, best,
+                           bid=max((float(x["price"]) for x in ev.get("bids", [])), default=None),
+                           ask=min((float(x["price"]) for x in ev.get("asks", [])), default=None), reset=True)
+        elif kind == "price_change":
+            for ch in ev.get("price_changes", ev.get("changes", [])):
+                self._poly_set(ch.get("asset_id", ev.get("asset_id")), tokens, best,
+                               bid=_f(ch.get("best_bid")), ask=_f(ch.get("best_ask")))
+        elif kind == "last_trade_price":
+            self._poly_set(ev.get("asset_id"), tokens, best, last=_f(ev.get("price")))
+
+    def _poly_set(self, tid, tokens, best, bid=None, ask=None, last=None, reset=False) -> None:
         if tid not in tokens:
             return
         mid, inv = tokens[tid]
         b = best.setdefault(tid, {})
-        if ev.get("event_type") == "book":
-            bids = [float(x["price"]) for x in ev.get("bids", [])]
-            asks = [float(x["price"]) for x in ev.get("asks", [])]
-            b["bid"] = max(bids) if bids else None
-            b["ask"] = min(asks) if asks else None
-        elif ev.get("event_type") == "price_change":
-            for ch in ev.get("changes", ev.get("price_changes", [])):
-                if "best_bid" in ch:
-                    b["bid"] = float(ch["best_bid"])
-                if "best_ask" in ch:
-                    b["ask"] = float(ch["best_ask"])
-        elif ev.get("event_type") == "last_trade_price":
-            b["last"] = float(ev.get("price", 0))
+        if reset or bid is not None:
+            b["bid"] = bid
+        if reset or ask is not None:
+            b["ask"] = ask
+        if last is not None:
+            b["last"] = last
         self.book.update(mid, "polymarket", b.get("bid"), b.get("ask"), b.get("last"), invert=inv)
 
     async def poll_polymarket_once(self) -> None:
+        """All mapped Polymarket books in one batched request (POST /books)."""
+        by_token = {m["polymarket"]["token_id"]: (mid, m["polymarket"].get("invert", False))
+                    for mid, m in self.mapping.items() if (m.get("polymarket") or {}).get("token_id")}
+        if not by_token:
+            return
         sess = await self._sess()
-        for mid, m in self.mapping.items():
-            pm = m.get("polymarket")
-            if not pm or not pm.get("token_id"):
+        try:
+            async with sess.post(f"{POLY_CLOB}/books", json=[{"token_id": t} for t in by_token]) as r:
+                if r.status != 200:
+                    return
+                books = await r.json()
+        except Exception:
+            return
+        for bk in books:
+            if bk.get("asset_id") not in by_token:
                 continue
-            try:
-                async with sess.get(f"{POLY_CLOB}/book", params={"token_id": pm["token_id"]}) as r:
-                    if r.status != 200:
-                        continue
-                    body = await r.json()
-            except Exception:
-                continue
-            bids = [float(x["price"]) for x in body.get("bids", [])]
-            asks = [float(x["price"]) for x in body.get("asks", [])]
-            self.book.update(mid, "polymarket", max(bids) if bids else None, min(asks) if asks else None,
-                             invert=pm.get("invert", False))
+            mid, inv = by_token[bk["asset_id"]]
+            bids = [float(x["price"]) for x in bk.get("bids", [])]
+            asks = [float(x["price"]) for x in bk.get("asks", [])]
+            self.book.update(mid, "polymarket", max(bids) if bids else None, min(asks) if asks else None, invert=inv)
 
     async def run(self) -> None:
         async def poly_poll():
             while True:
                 await self.poll_polymarket_once()
                 await asyncio.sleep(max(self.poll_s, 15))
+        # Kalshi: batched REST at poll_s until a Kalshi websocket key is added; Polymarket:
+        # public websocket, with a slow batched REST sweep as a safety net
         await asyncio.gather(self.run_kalshi_polling(), self.run_polymarket_ws(), poly_poll())
 
     async def close(self) -> None:
         if self._session is not None:
             await self._session.close()
+
+
+def _f(x) -> Optional[float]:
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
 
 
 def _cents_or_dollars(body: dict, key: str) -> Optional[float]:

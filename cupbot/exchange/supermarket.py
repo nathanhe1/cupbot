@@ -59,21 +59,42 @@ class SuperMarketExchange(Exchange):
         self._headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
         self.read_bucket = TokenBucket(cfg.read_rps)
         self.write_bucket = TokenBucket(cfg.write_rps)
-        self._session: Optional["aiohttp.ClientSession"] = None
+        # Two connection pools: orders never queue behind a slow read on the same
+        # HTTP/1.1 connection (measured 217 ms vs 13 ms in tuning/bench_local.py).
+        self._session: Optional["aiohttp.ClientSession"] = None        # reads
+        self._order_session: Optional["aiohttp.ClientSession"] = None  # writes only
+        self._warm_task = None
         self.market_cache: Dict[str, Market] = {}
         self.last_rate_headers: Dict[str, str] = {}
         self.calls = 0
 
     # ------------------------------------------------------------ transport
-    async def _sess(self) -> "aiohttp.ClientSession":
+    def _new_session(self, limit: int) -> "aiohttp.ClientSession":
+        # aiohttp sets TCP_NODELAY on its sockets, so no Nagle / delayed-ACK stall
+        conn = aiohttp.TCPConnector(limit=limit, keepalive_timeout=120, ttl_dns_cache=3600)
+        return aiohttp.ClientSession(headers=self._headers, connector=conn,
+                                     timeout=aiohttp.ClientTimeout(total=self.cfg.timeout_s))
+
+    async def _sess(self, write: bool = False) -> "aiohttp.ClientSession":
         if aiohttp is None:
             raise RuntimeError("live mode needs aiohttp: pip3 install --user aiohttp")
+        if write:
+            if self._order_session is None or self._order_session.closed:
+                self._order_session = self._new_session(limit=2)
+            return self._order_session
         if self._session is None or self._session.closed:
-            conn = aiohttp.TCPConnector(limit=8, keepalive_timeout=60, ttl_dns_cache=300)
-            self._session = aiohttp.ClientSession(
-                base_url=None, headers=self._headers, connector=conn,
-                timeout=aiohttp.ClientTimeout(total=self.cfg.timeout_s))
+            self._session = self._new_session(limit=6)
         return self._session
+
+    async def keep_warm(self, every_s: float = 20.0) -> None:
+        """Keep the order connection's TCP+TLS alive with a cheap authenticated GET, so an
+        order never pays connection setup (measured 40 ms cold vs 13 ms warm)."""
+        while True:
+            try:
+                await self._request("GET", "whoami", write=True, retries=0)
+            except Exception:
+                pass
+            await asyncio.sleep(every_s)
 
     def _url(self, name: str, **kw: str) -> str:
         return self.cfg.base_url.rstrip("/") + self.cfg.paths[name].format(**kw)
@@ -88,7 +109,7 @@ class SuperMarketExchange(Exchange):
         for attempt in range(retries + 1):
             await bucket.acquire()
             try:
-                status, rheaders, body = await self._send(method, url, params, json, headers)
+                status, rheaders, body = await self._send(method, url, params, json, headers, write)
                 self.calls += 1
                 rl = {k: v for k, v in rheaders.items() if "ratelimit" in k.lower() or k.lower() == "retry-after"}
                 if rl:
@@ -109,9 +130,9 @@ class SuperMarketExchange(Exchange):
                 await asyncio.sleep(backoff_s(attempt))
         raise RuntimeError(f"{method} {url}: retries exhausted")
 
-    async def _send(self, method: str, url: str, params, json_body, headers):
+    async def _send(self, method: str, url: str, params, json_body, headers, write: bool = False):
         """One HTTP exchange -> (status, headers, parsed body). Tests override this."""
-        sess = await self._sess()
+        sess = await self._sess(write)
         async with sess.request(method, url, params=params, json=json_body, headers=headers) as r:
             try:
                 body = await r.json(content_type=None)
@@ -237,5 +258,6 @@ class SuperMarketExchange(Exchange):
         return n
 
     async def close(self) -> None:
-        if self._session is not None:
-            await self._session.close()
+        for sess in (self._session, self._order_session):
+            if sess is not None:
+                await sess.close()
