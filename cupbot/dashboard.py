@@ -1,8 +1,9 @@
 """Local live dashboard: `python3 -m cupbot dashboard`, then open http://127.0.0.1:8790.
 
 Reads the bot's journal (SQLite), its pid file, the kill switch and the recorders'
-output files. Every 60 s it also reads the Cup balance and positions (2 of the
-account's 100 reads a minute). It can switch the kill switch on and off, and has
+output files, so it adds no load to the bot's own API budget. With --account it
+also reads the Cup balance and positions every 60 s (2 of the account's 100
+reads a minute, shared with the bot), which is off by default. It can switch the kill switch on and off, and has
 no way to place an order. Listens on localhost only."""
 
 from __future__ import annotations
@@ -183,7 +184,7 @@ def make_handler(state: State):
     return H
 
 
-def serve(cfg: BotConfig, port: int = 8790, with_account: bool = True) -> None:
+def serve(cfg: BotConfig, port: int = 8790, with_account: bool = False) -> None:
     os.chdir(ROOT)
     account = None
     if with_account and os.environ.get(cfg.venue.api_key_env):

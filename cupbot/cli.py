@@ -55,6 +55,8 @@ def main(argv=None) -> int:
     sub.add_parser("status")
     db_ = sub.add_parser("dashboard")
     db_.add_argument("--port", type=int, default=8790)
+    db_.add_argument("--account", action="store_true",
+                     help="also read Cup balance/positions every 60 s (uses 2 of the bot's 100 reads a minute)")
     rc = sub.add_parser("record")
     rc.add_argument("--interval", type=float, default=2.0)
     rc.add_argument("--minutes", type=float, default=None)
@@ -159,7 +161,7 @@ def main(argv=None) -> int:
 
     if a.cmd == "dashboard":
         from .dashboard import serve
-        serve(cfg, a.port)
+        serve(cfg, a.port, with_account=a.account)
         return 0
 
     if a.cmd == "status":

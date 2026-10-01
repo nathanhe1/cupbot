@@ -176,7 +176,8 @@ function render(s) {
     const pnl = a.initial ? a.balance + ((a.summary || {}).totalMarketValue || 0) - a.initial : null;
     $("balanceSub").textContent = pnl == null ? "SUSQies" : `SUSQies · P&L ${pnl >= 0 ? "+" : ""}${fmt(pnl)}` + (a.ok ? "" : " · stale");
   } else {
-    $("balanceSub").textContent = a ? (a.error || "") : "no API key";
+    $("balance").textContent = "–";
+    $("balanceSub").textContent = a ? (a.error || "") : "off, to keep the bot's API budget (--account turns it on)";
   }
 
   const c = j.counts_24h || {};
