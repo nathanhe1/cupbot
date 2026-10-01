@@ -68,22 +68,27 @@ class RiskConfig:
 class VenueConfig:
     base_url: str = "https://sig.thesuper.market/api/v1"
     api_key_env: str = "SUPERMARKET_API_KEY"
-    tournament_id: str = ""
-    read_rps: float = 2.0            # stay below the published limits once known
-    write_rps: float = 2.0
+    # Midterm Elections tournament (GET /tournaments). Every read and order is scoped to it.
+    tournament_id: str = "bda92870-621e-47b0-bc3c-3602c5c26f55"
+    tournament_slug: str = "midterm-elections"
+    # Published limits are per account: 100 reads and 30 writes per minute.
+    read_rps: float = 1.5
+    write_rps: float = 0.45
     timeout_s: float = 5.0
-    price_scale: float = 1.0         # 1.0 if the API quotes 0-1, 100.0 if cents
+    price_scale: float = 1.0         # the API quotes YES prices in 0-1
+    tick: float = 0.005              # limit prices must be on this tick, 0.005..0.995
     live_trading_enabled: bool = False  # must be true AND --live passed to send real orders
-    # Endpoint paths are GUESSES until checked against /api/v1/docs while logged in.
+    # Checked against /api/v1/openapi.json (saved in docs/openapi.json) on Oct 1.
     paths: Dict[str, str] = field(default_factory=lambda: {
-        "whoami": "/me",
+        "whoami": "/account",
         "markets": "/markets",
         "prices": "/exchanges/prices",
-        "book": "/markets/{market_id}/orderbook",
-        "positions": "/portfolio/positions",
-        "balance": "/portfolio/balance",
+        "book": "/exchanges/{market_id}/orderbook",
+        "positions": "/tournaments/{slug}/portfolio/positions",
+        "balance": "/tournaments/{slug}",
         "orders": "/orders",
         "cancel": "/orders/{order_id}",
+        "cancel_all": "/orders/cancel-all",
     })
 
 

@@ -42,24 +42,34 @@ def run(c):
 
 class TestSuperMarketClient(unittest.TestCase):
     def test_reads_parse(self):
+        T = "t-1"
         ex = FakeCup({
-            ("GET", "/markets"): (200, {}, {"markets": [{"id": "m1", "title": "Democrat wins NC Senate"},
-                                                         {"id": "m2", "title": "x", "resolved": True}]}),
+            ("GET", "/markets"): (200, {}, {"data": [
+                {"id": "388", "title": "Will the Democratic Party win the NC Senate?", "status": "open",
+                 "exchanges": [{"id": "1077", "option": "YES"}]},
+                {"id": "390", "title": "Who wins?", "status": "settled", "isMultiOutcome": True,
+                 "exchanges": [{"id": "1080", "option": "A"}, {"id": "1081", "option": "B"}]}],
+                "pagination": {"hasMore": False, "nextCursor": None}}),
             ("GET", "/exchanges/prices"): (200, {"X-RateLimit-Remaining": "9"},
-                                           [{"id": "m1", "best_bid": "41", "best_ask": "43", "best_bid_size": 10}]),
-            ("GET", "/portfolio/balance"): (200, {}, {"balance": "100000.00"}),
-            ("GET", "/portfolio/positions"): (200, {}, [{"market_id": "m1", "quantity": "5", "side": "no"}]),
-        }, cfg={"price_scale": 100.0})
+                                           {"data": [{"exchangeId": "1077", "bestBid": 0.41, "bestAsk": 0.43}],
+                                            "missingIds": []}),
+            ("GET", "/tournaments/midterm-elections"): (200, {}, {"id": T, "myBalance": 100000}),
+            ("GET", "/tournaments/midterm-elections/portfolio/positions"): (200, {}, {"positions": [
+                {"exchangeId": "1077", "quantity": 5, "settled": False,
+                 "lots": [{"side": "no", "quantity": 5}]}], "summary": {}}),
+        }, cfg={"tournament_id": T})
         ms = run(ex.get_markets())
-        self.assertEqual([m.market_id for m in ms], ["m1", "m2"])
+        self.assertEqual([m.market_id for m in ms], ["1077", "1080", "1081"])
+        self.assertEqual(ms[1].title, "Who wins? [A]")
         self.assertTrue(ms[1].closed)
-        b = run(ex.get_books(["m1"]))["m1"]
+        self.assertEqual(ex.sent[0][2]["tournamentId"], T)
+        b = run(ex.get_books(["1077"]))["1077"]
         self.assertAlmostEqual(b.best_bid, 0.41)
         self.assertAlmostEqual(b.best_ask, 0.43)
         self.assertEqual(ex.last_rate_headers, {"X-RateLimit-Remaining": "9"})
         acct = run(ex.get_account())
         self.assertEqual(acct.cash, 100000.0)
-        self.assertEqual(acct.positions, {"m1": -5.0})
+        self.assertEqual(acct.positions, {"1077": -5.0})
 
     def test_orders_refused_unless_enabled(self):
         ex = FakeCup({}, allow_orders=True)   # config flag still false
@@ -68,16 +78,31 @@ class TestSuperMarketClient(unittest.TestCase):
         self.assertEqual(ex.sent, [])
 
     def test_order_payload_and_idempotency(self):
-        ex = FakeCup({("POST", "/orders"): (200, {}, {"id": "o1", "status": "filled", "filled_quantity": 10,
-                                                      "average_price": 40})},
-                     allow_orders=True, cfg={"live_trading_enabled": True, "price_scale": 100.0})
-        res = run(ex.place_order(OrderRequest("m1", Side.BUY, 10, 0.4, client_id="c1")))
+        ex = FakeCup({("POST", "/orders"): (200, {}, {"orderId": 7, "exchangeId": "1077", "open": False,
+                                                      "quantityTraded": 10, "totalCost": 4.2, "fillPrice": 0.42})},
+                     allow_orders=True, cfg={"live_trading_enabled": True, "tournament_id": "t-1"})
+        res = run(ex.place_order(OrderRequest("1077", Side.BUY, 10, 0.4237, client_id="c1")))
         self.assertEqual(res.status, OrderStatus.FILLED)
-        self.assertAlmostEqual(res.avg_price, 0.40)
+        self.assertAlmostEqual(res.avg_price, 0.42)
+        self.assertEqual(res.venue_order_id, "7")
         method, url, params, body, headers = ex.sent[0]
-        self.assertEqual(headers["Idempotency-Key"], "c1")
-        self.assertEqual(body["limit_price"], "40.0")
-        self.assertEqual(body["quantity"], "10")
+        self.assertEqual(body["idempotencyKey"], "c1")
+        self.assertEqual((body["exchangeId"], body["side"], body["action"]), ("1077", "yes", "buy"))
+        self.assertEqual(body["price"], 0.42)        # buy rounds down onto the 0.005 tick
+        self.assertEqual(body["quantity"], 10)
+        self.assertEqual(body["tournamentId"], "t-1")
+        self.assertIsNone(params)                    # tournament goes in the body for writes
+        run(ex.place_order(OrderRequest("1077", Side.SELL, 10, 0.4237, client_id="c2")))
+        self.assertEqual(ex.sent[1][3]["price"], 0.425)   # sell rounds up
+
+    def test_resting_and_unfilled_statuses(self):
+        seq = iter([(200, {}, {"orderId": 1, "open": True, "quantityTraded": 0, "totalCost": 0, "fillPrice": None}),
+                    (200, {}, {"orderId": 2, "open": True, "quantityTraded": 4, "totalCost": 1.6, "fillPrice": 0.4}),
+                    (200, {}, {"orderId": 3, "open": False, "quantityTraded": 0, "totalCost": 0, "fillPrice": None})])
+        ex = FakeCup({("POST", "/orders"): lambda: next(seq)}, allow_orders=True,
+                     cfg={"live_trading_enabled": True})
+        sts = [run(ex.place_order(OrderRequest("1", Side.BUY, 10, 0.4, client_id=f"c{i}"))).status for i in range(3)]
+        self.assertEqual(sts, [OrderStatus.ACKED, OrderStatus.PARTIAL, OrderStatus.CANCELLED])
 
     def test_timeout_is_unknown_not_resent(self):
         ex = FakeCup({("POST", "/orders"): asyncio.TimeoutError()}, allow_orders=True,
@@ -86,22 +111,41 @@ class TestSuperMarketClient(unittest.TestCase):
         self.assertEqual(res.status, OrderStatus.UNKNOWN)
         self.assertEqual(len(ex.sent), 1)
 
+    def test_502_status_unknown_is_unknown(self):
+        ex = FakeCup({("POST", "/orders"): (502, {}, {"error": {"code": "ORDER_STATUS_UNKNOWN"}})},
+                     allow_orders=True, cfg={"live_trading_enabled": True})
+        res = run(ex.place_order(OrderRequest("m1", Side.BUY, 10, 0.4, client_id="c1")))
+        self.assertEqual(res.status, OrderStatus.UNKNOWN)
+        self.assertEqual(len(ex.sent), 1)
+
+    def test_lookup_order_matches_what_was_sent(self):
+        import time as _t
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        ex = FakeCup({("POST", "/orders"): asyncio.TimeoutError(),
+                      ("GET", "/orders"): (200, {}, {"data": [
+                          {"id": 9, "exchangeId": "5", "quantity": 3, "priceLimit": 0.4, "createdAt": now},
+                          {"id": 10, "exchangeId": "5", "quantity": 10, "priceLimit": 0.4, "createdAt": now}]})},
+                     allow_orders=True, cfg={"live_trading_enabled": True})
+        run(ex.place_order(OrderRequest("5", Side.BUY, 10, 0.4, client_id="c1")))
+        self.assertEqual(run(ex.lookup_order("c1"))["id"], 10)
+        self.assertIsNone(run(ex.lookup_order("never-sent")))
+
     def test_429_then_success_and_5xx_retry(self):
         seq = iter([(429, {"Retry-After": "0"}, {}), (503, {}, {}), (200, {}, {"ok": True})])
-        ex = FakeCup({("GET", "/me"): lambda: next(seq)})
+        ex = FakeCup({("GET", "/account"): lambda: next(seq)})
         self.assertEqual(run(ex.whoami()), {"ok": True})
         self.assertEqual(len(ex.sent), 3)
 
     def test_4xx_raises(self):
-        ex = FakeCup({("GET", "/me"): (401, {}, {"error": "bad key"})})
+        ex = FakeCup({("GET", "/account"): (401, {}, {"error": {"code": "INVALID_API_KEY"}})})
         with self.assertRaises(RuntimeError):
             run(ex.whoami())
 
-    def test_cancel_all_filters_market(self):
-        ex = FakeCup({("GET", "/orders"): (200, {}, [{"id": "a", "market_id": "m1"}, {"id": "b", "market_id": "m2"}]),
-                      ("DELETE", "/orders/a"): (200, {}, {}), ("DELETE", "/orders/b"): (200, {}, {})})
-        self.assertEqual(run(ex.cancel_all("m1")), 1)
-        self.assertEqual([s[1].rsplit("/", 1)[-1] for s in ex.sent if s[0] == "DELETE"], ["a"])
+    def test_cancel_all_scoped(self):
+        ex = FakeCup({("POST", "/orders/cancel-all"): (200, {}, {"cancelled": 2})}, cfg={"tournament_id": "t-1"})
+        self.assertEqual(run(ex.cancel_all("1077")), 2)
+        self.assertEqual(ex.sent[0][3], {"tournamentId": "t-1", "exchangeId": "1077"})
 
 
 class TestEngineUnknownOrders(unittest.TestCase):

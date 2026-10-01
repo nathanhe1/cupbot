@@ -1,32 +1,36 @@
 """Live client for the Predictions Cup platform (sig.thesuper.market).
 
-STATUS: skeleton. Confirmed from public sources: base URL /api/v1, Bearer API
-key with read + trade scopes, a bulk prices endpoint (/exchanges/prices, up to
-100 ids), MARKET and LIMIT order kinds, Decimal-style numeric prices, and an
-Idempotency-Key header on at least one order endpoint. Everything else (paths,
-field names, price scale, rate and position limits) must be checked against
-https://sig.thesuper.market/api/v1/docs while logged in, then set in
-config/*.json -> venue.paths and the `_parse_*` helpers below.
+Endpoints, fields and limits follow the official spec at /api/v1/openapi.json
+(a copy is saved in docs/openapi.json). Key facts:
+  * The bot's market id is the Cup's exchangeId (the tradable contract). A binary
+    market has one exchange; a multi-outcome market has one per option.
+  * Prices are YES prices in 0-1; limit prices must sit on the 0.005 tick.
+  * Every read and order is scoped to the tournament (venue.tournament_id / slug).
+  * 100 reads and 30 writes per minute per account.
 
 Safety:
   * Orders are only sent if venue.live_trading_enabled is true in config AND the
     process was started with --live. Otherwise place_order() raises.
-  * Every create carries an Idempotency-Key = client order id. A timeout returns
-    status UNKNOWN; the engine never blindly resends, the reconciler resolves it.
+  * Every create carries idempotencyKey = client order id. A timeout or a 5xx
+    (including 502 ORDER_STATUS_UNKNOWN) returns status UNKNOWN; the engine never
+    blindly resends, and lookup_order() resolves it from the order list.
   * Separate token buckets for reads and writes, below the published limits.
 """
 
 from __future__ import annotations
 
 import asyncio
+import math
 import os
+import time
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence
 
 from ..config import VenueConfig
 from ..ratelimit import TokenBucket, backoff_s
 from ..types import (Account, BookMap, Level, Market, OrderBook, OrderKind, OrderRequest, OrderResult,
-                     OrderStatus)
+                     OrderStatus, Side, TimeInForce)
 from .base import Exchange
 
 try:  # optional dependency, only needed for live mode
@@ -65,6 +69,8 @@ class SuperMarketExchange(Exchange):
         self._order_session: Optional["aiohttp.ClientSession"] = None  # writes only
         self._warm_task = None
         self.market_cache: Dict[str, Market] = {}
+        self.exchange_market: Dict[str, str] = {}           # exchangeId -> Cup marketId
+        self._placed: Dict[str, Dict[str, Any]] = {}       # client id -> what we sent, for lookup_order
         self.last_rate_headers: Dict[str, str] = {}
         self.calls = 0
 
@@ -96,16 +102,13 @@ class SuperMarketExchange(Exchange):
                 pass
             await asyncio.sleep(every_s)
 
-    def _url(self, name: str, **kw: str) -> str:
-        return self.cfg.base_url.rstrip("/") + self.cfg.paths[name].format(**kw)
-
     async def _request(self, method: str, name: str, *, write: bool = False, params=None, json=None,
                        headers=None, retries: int = 3, **path_kw) -> Any:
         bucket = self.write_bucket if write else self.read_bucket
         url = self._url(name, **path_kw)
-        if self.cfg.tournament_id:
+        if self.cfg.tournament_id and method == "GET":
             params = dict(params or {})
-            params.setdefault("tournament_id", self.cfg.tournament_id)
+            params.setdefault("tournamentId", self.cfg.tournament_id)
         for attempt in range(retries + 1):
             await bucket.acquire()
             try:
@@ -140,122 +143,192 @@ class SuperMarketExchange(Exchange):
                 body = await r.text()
             return r.status, dict(r.headers), body
 
+    def _url(self, name: str, **kw: str) -> str:
+        kw.setdefault("slug", self.cfg.tournament_slug)
+        return self.cfg.base_url.rstrip("/") + self.cfg.paths[name].format(**kw)
+
     # ----------------------------------------------------------- read side
     async def whoami(self) -> Any:
         return await self._request("GET", "whoami")
 
     async def get_markets(self) -> List[Market]:
-        body = await self._request("GET", "markets")
-        items = body if isinstance(body, list) else _get(body, "markets", "data", "items", default=[])
-        out = []
-        for it in items:
-            mid = str(_get(it, "id", "market_id", "slug"))
-            m = self.market_cache.get(mid) or Market(mid, str(_get(it, "title", "name", "question", default=mid)))
-            m.closed = bool(_get(it, "closed", "resolved", default=False))
-            self.market_cache[mid] = m
-            out.append(m)
+        """Every exchange in the tournament as one bot market (paginated /markets)."""
+        out: List[Market] = []
+        cursor = None
+        for _ in range(50):
+            params = {"limit": 100}
+            if cursor:
+                params["cursor"] = cursor
+            body = await self._request("GET", "markets", params=params)
+            items = body if isinstance(body, list) else _get(body, "data", "markets", default=[])
+            for it in items:
+                title = str(_get(it, "title", default=it.get("id")))
+                status = str(_get(it, "status", default="open")).lower()
+                for ctx in it.get("contexts") or []:
+                    t = ctx.get("tournament") or {}
+                    if t.get("id") == self.cfg.tournament_id:
+                        status = str(ctx.get("status") or status).lower()
+                exs = it.get("exchanges") or [{"id": it.get("id"), "option": "YES"}]
+                multi = bool(it.get("isMultiOutcome")) or len(exs) > 1
+                for e in exs:
+                    eid = str(e["id"])
+                    t = f"{title} [{e.get('option')}]" if multi else title
+                    m = self.market_cache.get(eid) or Market(eid, t)
+                    m.closed = status not in ("open", "active")
+                    self.market_cache[eid] = m
+                    self.exchange_market[eid] = str(it.get("id"))
+                    out.append(m)
+            pag = body.get("pagination", {}) if isinstance(body, dict) else {}
+            cursor = pag.get("nextCursor")
+            if not pag.get("hasMore") or not cursor:
+                break
         return out
 
     async def get_books(self, market_ids: Sequence[str]) -> BookMap:
-        """Bulk top-of-book via /exchanges/prices (<= 100 ids per call). Full depth
-        per market costs one request each, so only fetch depth where needed."""
+        """Bulk top-of-book via /exchanges/prices (<= 100 exchange ids per call). The bulk
+        snapshot has no sizes; full depth costs one read per exchange (get_book_depth)."""
         out: BookMap = {}
         ids = list(market_ids)
         for i in range(0, len(ids), 100):
             chunk = ids[i:i + 100]
             body = await self._request("GET", "prices", params={"ids": ",".join(chunk)})
-            items = body if isinstance(body, list) else _get(body, "prices", "data", default=[])
+            items = body if isinstance(body, list) else _get(body, "data", "prices", default=[])
             for it in items:
-                mid = str(_get(it, "id", "market_id", "exchange_id"))
+                mid = str(_get(it, "exchangeId", "id"))
                 out[mid] = self._parse_bbo(mid, it)
         return out
 
-    async def get_book_depth(self, market_id: str) -> OrderBook:
-        body = await self._request("GET", "book", market_id=market_id)
+    async def get_book_depth(self, market_id: str, depth: int = 20) -> OrderBook:
+        body = await self._request("GET", "book", params={"depth": depth}, market_id=market_id)
         s = self.cfg.price_scale
-        bids = [Level(float(Decimal(str(_get(l, "price", "p")))) / s, float(_get(l, "quantity", "qty", "size")))
-                for l in _get(body, "bids", default=[])]
-        asks = [Level(float(Decimal(str(_get(l, "price", "p")))) / s, float(_get(l, "quantity", "qty", "size")))
-                for l in _get(body, "asks", default=[])]
+        bids = [Level(float(Decimal(str(l["price"]))) / s, float(l["quantity"])) for l in body.get("bids") or []]
+        asks = [Level(float(Decimal(str(l["price"]))) / s, float(l["quantity"])) for l in body.get("asks") or []]
         bids.sort(key=lambda l: -l.price)
         asks.sort(key=lambda l: l.price)
         return OrderBook(market_id, bids, asks)
 
+    # Size shown for a bulk-snapshot level, which carries no size. The pre-open sponsor
+    # quotes are 1000 deep; the strategy's own caps bound the order size anyway.
+    BBO_SIZE_GUESS = 1000.0
+
     def _parse_bbo(self, mid: str, it: Dict[str, Any]) -> OrderBook:
         s = self.cfg.price_scale
-        bb = _get(it, "best_bid", "bid", "yes_bid")
-        ba = _get(it, "best_ask", "ask", "yes_ask")
-        bq = _get(it, "best_bid_size", "bid_size", default=0)
-        aq = _get(it, "best_ask_size", "ask_size", default=0)
-        bids = [Level(float(Decimal(str(bb))) / s, float(bq or 0))] if bb is not None else []
-        asks = [Level(float(Decimal(str(ba))) / s, float(aq or 0))] if ba is not None else []
+        bb = _get(it, "bestBid", "best_bid")
+        ba = _get(it, "bestAsk", "best_ask")
+        bq = _get(it, "bestBidSize", "best_bid_size", default=self.BBO_SIZE_GUESS)
+        aq = _get(it, "bestAskSize", "best_ask_size", default=self.BBO_SIZE_GUESS)
+        bids = [Level(float(Decimal(str(bb))) / s, float(bq))] if bb is not None else []
+        asks = [Level(float(Decimal(str(ba))) / s, float(aq))] if ba is not None else []
         return OrderBook(mid, bids, asks)
 
     async def get_account(self) -> Account:
-        bal = await self._request("GET", "balance")
+        t = await self._request("GET", "balance")
         pos = await self._request("GET", "positions")
-        cash = float(Decimal(str(_get(bal, "balance", "cash", "available", default=0))))
+        cash = float(Decimal(str(_get(t, "myBalance", "balance", default=0))))
         items = pos if isinstance(pos, list) else _get(pos, "positions", "data", default=[])
-        positions = {}
+        positions: Dict[str, float] = {}
         for p in items:
-            mid = str(_get(p, "market_id", "id", "exchange_id"))
-            q = float(Decimal(str(_get(p, "quantity", "qty", "position", default=0))))
-            side = str(_get(p, "side", "outcome", default="yes")).lower()
-            positions[mid] = q if side in ("yes", "long", "buy") else -q
+            if p.get("settled"):
+                continue
+            mid = str(_get(p, "exchangeId", "id"))
+            lots = p.get("lots") or []
+            if lots:   # YES lots count long, NO lots short (net YES exposure)
+                q = sum(float(l["quantity"]) * (1 if str(l.get("side", "yes")).lower() == "yes" else -1)
+                        for l in lots)
+            else:
+                q = float(_get(p, "quantity", default=0))
+            if q:
+                positions[mid] = positions.get(mid, 0.0) + q
         return Account(cash, positions)
 
     # ---------------------------------------------------------- write side
+    def _price_on_tick(self, price: float, side: Side) -> float:
+        """Round a limit price onto the venue tick, never in our disfavour: buys down, sells up."""
+        n = price * self.cfg.price_scale / self.cfg.tick
+        n = math.floor(n + 1e-9) if side == Side.BUY else math.ceil(n - 1e-9)
+        return min(0.995, max(0.005, round(n * self.cfg.tick, 3)))
+
     async def place_order(self, req: OrderRequest) -> OrderResult:
         if not self.allow_orders:
             raise LiveTradingDisabled("live orders are disabled (config venue.live_trading_enabled + --live)")
-        s = self.cfg.price_scale
-        payload = {
-            "market_id": req.market_id,
-            "side": req.side.value,
-            "kind": "LIMIT" if req.kind == OrderKind.LIMIT else "MARKET",
-            "quantity": str(int(req.qty)),
-            "client_order_id": req.client_id,
+        payload: Dict[str, Any] = {
+            "idempotencyKey": req.client_id,
+            "exchangeId": req.market_id,
+            "side": "yes",                      # always YES-denominated; selling flat buys NO
+            "action": "buy" if req.side == Side.BUY else "sell",
+            "quantity": int(req.qty),
         }
+        if self.cfg.tournament_id:
+            payload["tournamentId"] = self.cfg.tournament_id
         if req.kind == OrderKind.LIMIT:
-            payload["limit_price"] = str(Decimal(str(round(req.price * s, 4))))
-            payload["time_in_force"] = req.tif.value.upper()
+            payload["price"] = self._price_on_tick(req.price, req.side)
+            if req.tif == TimeInForce.IOC:
+                # no IOC flag on this API: a short expiry stops a taking order from resting
+                exp = datetime.now(timezone.utc) + timedelta(seconds=5)
+                payload["expirationDate"] = exp.isoformat().replace("+00:00", "Z")
+        self._placed[req.client_id] = {"exchangeId": req.market_id, "quantity": int(req.qty),
+                                       "price": payload.get("price"), "ts": time.time()}
         try:
-            body = await self._request("POST", "orders", write=True, json=payload,
-                                       headers={"Idempotency-Key": req.client_id}, retries=0)
+            body = await self._request("POST", "orders", write=True, json=payload, retries=0)
         except asyncio.TimeoutError:
             return OrderResult(req.client_id, OrderStatus.UNKNOWN, error="timeout: reconcile before resending")
         except RuntimeError as e:
-            return OrderResult(req.client_id, OrderStatus.REJECTED, error=str(e))
-        status = str(_get(body, "status", default="acked")).lower()
-        filled = float(_get(body, "filled_quantity", "filled", default=0) or 0)
-        avg = float(_get(body, "average_price", "avg_price", default=0) or 0) / s
-        st = {"filled": OrderStatus.FILLED, "partially_filled": OrderStatus.PARTIAL, "open": OrderStatus.ACKED,
-              "cancelled": OrderStatus.CANCELLED, "rejected": OrderStatus.REJECTED}.get(status, OrderStatus.ACKED)
-        return OrderResult(req.client_id, st, filled, avg, venue_order_id=str(_get(body, "id", "order_id")))
+            msg = str(e)
+            if "-> 5" in msg or "ORDER_STATUS_UNKNOWN" in msg:
+                return OrderResult(req.client_id, OrderStatus.UNKNOWN, error=msg)
+            return OrderResult(req.client_id, OrderStatus.REJECTED, error=msg)
+        filled = float(_get(body, "quantityTraded", default=0) or 0)
+        total = float(_get(body, "totalCost", default=0) or 0)
+        fp = _get(body, "fillPrice")
+        avg = float(fp) if fp is not None else (total / filled if filled else 0.0)
+        if filled >= int(req.qty) - 1e-9:
+            st = OrderStatus.FILLED
+        elif filled > 0:
+            st = OrderStatus.PARTIAL
+        elif body.get("open"):
+            st = OrderStatus.ACKED
+        else:
+            st = OrderStatus.CANCELLED   # e.g. self-trade prevented, or a taking order with nothing to hit
+        return OrderResult(req.client_id, st, filled, avg / self.cfg.price_scale,
+                           venue_order_id=str(_get(body, "orderId", default="")))
 
     async def open_orders(self) -> List[Dict]:
-        body = await self._request("GET", "orders", params={"status": "open"})
-        return body if isinstance(body, list) else _get(body, "orders", "data", default=[])
+        body = await self._request("GET", "orders", params={"status": "open", "limit": 200})
+        return body if isinstance(body, list) else _get(body, "data", "orders", default=[])
 
     async def lookup_order(self, client_id: str) -> Optional[Dict]:
-        """Find an order by our client id (used to resolve UNKNOWN after a timeout)."""
-        body = await self._request("GET", "orders", params={"client_order_id": client_id})
-        items = body if isinstance(body, list) else _get(body, "orders", "data", default=[])
+        """Resolve an UNKNOWN create: the order list has no client id, so match what we
+        sent (exchange, quantity, limit price) among orders created since we sent it."""
+        sent = self._placed.get(client_id)
+        if not sent:
+            return None
+        body = await self._request("GET", "orders", params={"status": "all", "exchangeId": sent["exchangeId"],
+                                                            "limit": 50})
+        items = body if isinstance(body, list) else _get(body, "data", default=[])
         for o in items:
-            if str(_get(o, "client_order_id", "client_id", default="")) == client_id:
-                return o
+            try:
+                created = datetime.fromisoformat(str(o["createdAt"]).replace("Z", "+00:00")).timestamp()
+            except (KeyError, ValueError):
+                continue
+            if created < sent["ts"] - 10 or int(float(o.get("quantity", 0))) != sent["quantity"]:
+                continue
+            if sent["price"] is not None and o.get("priceLimit") is not None \
+                    and abs(float(o["priceLimit"]) - sent["price"]) > 1e-6 \
+                    and abs(1 - float(o["priceLimit"]) - sent["price"]) > 1e-6:
+                continue
+            return o
         return None
 
     async def cancel_all(self, market_id: str = "") -> int:
-        items = await self.open_orders()
-        n = 0
-        for o in items:
-            if market_id and str(_get(o, "market_id")) != market_id:
-                continue
-            # cancels can 503 under load and are safe to retry (platform changelog)
-            await self._request("DELETE", "cancel", write=True, retries=4, order_id=str(_get(o, "id", "order_id")))
-            n += 1
-        return n
+        """POST /orders/cancel-all for the tournament (optionally one exchange). A 503 means
+        it paused partway; retry until 200, which confirms nothing targeted is still resting."""
+        body: Dict[str, Any] = {}
+        if self.cfg.tournament_id:
+            body["tournamentId"] = self.cfg.tournament_id
+        if market_id:
+            body["exchangeId"] = market_id
+        res = await self._request("POST", "cancel_all", write=True, json=body, retries=6)
+        return int(_get(res, "cancelled", default=0) or 0) if isinstance(res, dict) else 0
 
     async def close(self) -> None:
         for sess in (self._session, self._order_session):

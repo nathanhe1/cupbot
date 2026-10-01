@@ -242,9 +242,9 @@ def guess_market(title: str) -> Dict:
     d = any(w in t for w in DEM_WORDS)
     r = any(w in t for w in REP_WORDS)
     sign = 1 if d and not r else -1 if r and not d else 0
-    if "senate" in t and ("control" in t or "majority" in t or "win the senate" in t):
+    if "senate" in t and ("control" in t or "majority" in t or "win the senate" in t or " u s senate" in t):
         return {"kind": "chamber", "race_id": "SENATE_D", "d_sign": sign}
-    if "house" in t and ("control" in t or "majority" in t or "win the house" in t):
+    if "house" in t and ("control" in t or "majority" in t or "win the house" in t or " u s house " in t):
         return {"kind": "chamber", "race_id": "HOUSE_D", "d_sign": sign}
     st = _find_state(t)
     if "senate" in t and st:

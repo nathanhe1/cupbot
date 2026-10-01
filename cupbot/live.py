@@ -294,7 +294,7 @@ async def draft_market_map(cfg: BotConfig, out_path: str) -> int:
         if others:
             entry["_check"] = (f"three-way race (also {', '.join(others)}): the model's D side means 'not the "
                                "Republican'. Make sure d_sign and anchors match what this market's YES means.")
-        if g["kind"] == "other" or g["d_sign"] == 0:
+        if not g["race_id"] or g["d_sign"] == 0:
             unsure.append(m.title)
             entry["_check"] = "could not tell race or party from the title: fill in by hand or delete"
         draft[m.market_id] = entry
