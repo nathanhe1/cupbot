@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cupbot-dashboard",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "cupbot", "dashboard"],
+      "port": 8790,
+      "url": "http://127.0.0.1:8790"
+    }
+  ]
+}

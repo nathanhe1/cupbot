@@ -3,6 +3,7 @@
   model        print the race model's probabilities from data/races_2026.json
   sim          backtest the engine on simulated contests (--runs, --sweep)
   paper        paper-trade one simulated contest tick by tick, printing activity
+  dashboard    live web dashboard on http://127.0.0.1:8790 (read-only + kill switch)
   whoami       check the Super.Market API key works (read-only)
   live         run against the real platform; DRY RUN unless --live (and config allows it)
   measure-mm   record Cup quotes next to Kalshi/Polymarket to measure the MM's repricing lag
@@ -52,6 +53,8 @@ def main(argv=None) -> int:
     dm.add_argument("--out", default="config/market_map.json")
     sub.add_parser("preflight")
     sub.add_parser("status")
+    db_ = sub.add_parser("dashboard")
+    db_.add_argument("--port", type=int, default=8790)
     rc = sub.add_parser("record")
     rc.add_argument("--interval", type=float, default=2.0)
     rc.add_argument("--minutes", type=float, default=None)
@@ -152,6 +155,11 @@ def main(argv=None) -> int:
     if a.cmd == "record":
         from .recorder import record
         record(a.interval, a.minutes)
+        return 0
+
+    if a.cmd == "dashboard":
+        from .dashboard import serve
+        serve(cfg, a.port)
         return 0
 
     if a.cmd == "status":

@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cupbot live</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #14171c; --muted: #667085; --line: #e4e7ec;
+    --good: #12805c; --good-bg: #e7f6ef; --bad: #c4320a; --bad-bg: #fdece7;
+    --warn: #b54708; --warn-bg: #fef4e6; --accent: #005db9; --accent-bg: #e8f1fb;
+    --buy: #12805c; --sell: #c4320a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #171a21; --ink: #e8eaed; --muted: #98a2b3; --line: #262b35;
+      --good: #4cc38a; --good-bg: #12261d; --bad: #f97066; --bad-bg: #2d1612;
+      --warn: #fdb022; --warn-bg: #2b2111; --accent: #6aa9ec; --accent-bg: #142236;
+      --buy: #4cc38a; --sell: #f97066;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 999px;
+          font-weight: 600; font-size: 13px; }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill.good { color: var(--good); background: var(--good-bg); }
+  .pill.bad { color: var(--bad); background: var(--bad-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.info { color: var(--accent); background: var(--accent-bg); }
+  .pill.good .dot { animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .spacer { flex: 1; }
+  .updated { color: var(--muted); font-size: 12px; }
+  button { font: inherit; font-weight: 600; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(4, 1fr); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .big { font-size: 26px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .row2 { display: grid; gap: 14px; grid-template-columns: 2fr 1fr; margin-top: 14px; }
+  h2 { font-size: 14px; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 8px;
+       border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--card); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.num { text-align: right; } th.num { text-align: right; }
+  .scroll { max-height: 440px; overflow: auto; }
+  .buy { color: var(--buy); font-weight: 600; } .sell { color: var(--sell); font-weight: 600; }
+  .tag { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+  .tag.dry_order { color: var(--accent); background: var(--accent-bg); }
+  .tag.order { color: var(--good); background: var(--good-bg); }
+  .tag.blocked { color: var(--muted); background: var(--bg); }
+  .why { color: var(--muted); font-size: 12px; }
+  td.why { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td { white-space: nowrap; }
+  .title { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alerts li { padding: 7px 0; border-bottom: 1px solid var(--line); list-style: none; }
+  .alerts ul { padding: 0; margin: 0; }
+  .alerts .k { font-weight: 700; text-transform: capitalize; }
+  .alerts .k.error, .alerts .k.halt, .alerts .k.kill { color: var(--bad); }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  svg { display: block; width: 100%; height: 90px; }
+  .empty { color: var(--muted); padding: 18px 0; text-align: center; }
+  .err { color: var(--bad); font-size: 12.5px; margin-top: 6px; }
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .row2 { grid-template-columns: 1fr; }
+    .title { max-width: 160px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>cupbot</h1>
+    <span id="runPill" class="pill warn"><span class="dot"></span><span>Connecting…</span></span>
+    <span id="modePill" class="pill info"><span>Dry run</span></span>
+    <span id="killPill" class="pill bad" hidden><span>Kill switch ON</span></span>
+    <span class="spacer"></span>
+    <span class="updated" id="updated"></span>
+    <button id="killBtn" class="danger">Kill switch</button>
+  </header>
+
+  <div id="banner" class="err" hidden></div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Balance</div>
+      <div class="big" id="balance">–</div>
+      <div class="sub" id="balanceSub">SUSQies</div>
+    </div>
+    <div class="card">
+      <div class="label">Orders, last 24h</div>
+      <div class="big" id="orders">–</div>
+      <div class="sub" id="ordersSub"></div>
+    </div>
+    <div class="card">
+      <div class="label">Uptime</div>
+      <div class="big" id="uptime">–</div>
+      <div class="sub" id="uptimeSub"></div>
+    </div>
+    <div class="card">
+      <div class="label">Recorders</div>
+      <div class="big" id="rec">–</div>
+      <div class="sub" id="recSub"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Activity, last 60 minutes</h2>
+    <div class="legend">
+      <span><i style="background:var(--good)"></i>Sent</span>
+      <span><i style="background:var(--accent)"></i>Dry run</span>
+      <span><i style="background:var(--muted)"></i>Blocked by risk limits</span>
+    </div>
+    <svg id="chart" viewBox="0 0 600 90" preserveAspectRatio="none"></svg>
+  </div>
+
+  <div class="row2">
+    <div class="card">
+      <h2>Recent orders</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Time</th><th></th><th>Side</th><th>Market</th><th class="num">Qty</th><th class="num">Price</th><th>Why</th></tr></thead>
+          <tbody id="ordersBody"><tr><td colspan="7" class="empty">No orders yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Positions</h2>
+      <div id="positions" class="empty">None</div>
+      <h2 style="margin-top:18px">Events</h2>
+      <div class="alerts"><ul id="alerts"><li class="empty">None yet</li></ul></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 0) => n == null ? "–" : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
+const hhmmss = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const ago = (s) => s < 90 ? `${Math.round(s)}s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${(s / 3600).toFixed(1)} h ago`;
+const dur = (s) => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h}h ${m}m` : `${m}m ${Math.floor(s % 60)}s`; };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let killOn = false;
+
+function pill(el, cls, text) { el.className = "pill " + cls; el.querySelector("span:last-child").textContent = text; }
+
+function render(s) {
+  const j = s.journal || {};
+  const last = j.last || {};
+  const started = last.start && (!last.stop || last.stop.ts < last.start.ts) ? last.start.ts : null;
+  const fresh = j.newest_ts && s.now - j.newest_ts < 120;
+
+  if (s.pid && fresh) pill($("runPill"), "good", "Running");
+  else if (s.pid) pill($("runPill"), "warn", "Running, quiet");
+  else pill($("runPill"), "bad", "Stopped");
+  pill($("modePill"), s.live_enabled ? "bad" : "info", s.live_enabled ? "LIVE trading enabled" : "Dry run, no real orders");
+  killOn = s.kill;
+  $("killPill").hidden = !s.kill;
+  $("killBtn").textContent = s.kill ? "Resume trading" : "Kill switch";
+  $("killBtn").className = s.kill ? "" : "danger";
+
+  const a = s.account;
+  if (a && a.balance != null) {
+    $("balance").textContent = fmt(a.balance);
+    const pnl = a.initial ? a.balance + ((a.summary || {}).totalMarketValue || 0) - a.initial : null;
+    $("balanceSub").textContent = pnl == null ? "SUSQies" : `SUSQies · P&L ${pnl >= 0 ? "+" : ""}${fmt(pnl)}` + (a.ok ? "" : " · stale");
+  } else {
+    $("balanceSub").textContent = a ? (a.error || "") : "no API key";
+  }
+
+  const c = j.counts_24h || {};
+  $("orders").textContent = fmt((c.order || 0) + (c.dry_order || 0));
+  $("ordersSub").textContent = `${fmt(c.order || 0)} sent · ${fmt(c.dry_order || 0)} dry run · ${fmt(c.blocked || 0)} blocked`;
+
+  $("uptime").textContent = s.pid && started ? dur(s.now - started) : "–";
+  $("uptimeSub").textContent = started ? `since ${new Date(started * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : (s.pid ? "" : "bot is not running");
+
+  const recs = Object.values(s.recorders || {}).filter(Boolean);
+  const live = recs.filter((r) => r.age_s < 300).length;
+  $("rec").textContent = recs.length ? `${live} of ${recs.length}` : "–";
+  $("recSub").textContent = recs.length ? `writing · newest ${ago(Math.min(...recs.map((r) => r.age_s)))}` : "no recorder files";
+
+  drawChart(j.per_min || {});
+
+  const rows = (j.recent || []).map((o) => `<tr>
+    <td>${hhmmss(o.ts)}</td>
+    <td><span class="tag ${o.kind}">${o.kind === "dry_order" ? "dry" : o.kind === "order" ? "sent" : "blocked"}</span></td>
+    <td class="${o.side}">${esc(o.side)}</td>
+    <td><div class="title" title="${esc(o.title)}">${esc(o.title)}</div></td>
+    <td class="num">${fmt(o.qty)}</td>
+    <td class="num">${o.price == null ? "mkt" : fmt(o.price, 3)}</td>
+    <td class="why" title="${esc((o.why ? o.why + ' · ' : '') + (o.reason || ''))}">${esc(o.why ? o.why + " · " : "")}${esc(o.reason || o.status || "")}</td></tr>`);
+  $("ordersBody").innerHTML = rows.length ? rows.join("") : `<tr><td colspan="7" class="empty">No orders yet</td></tr>`;
+
+  const pos = (a && a.positions) || [];
+  $("positions").className = pos.length ? "" : "empty";
+  $("positions").innerHTML = pos.length ? `<table><thead><tr><th>Market</th><th class="num">Qty</th><th class="num">P&L</th></tr></thead><tbody>` +
+    pos.map((p) => `<tr><td><div class="title" title="${esc(p.marketTitle)}">${esc(p.marketTitle)}</div></td><td class="num">${fmt(p.quantity)}</td><td class="num">${fmt(p.unrealizedPnl)}</td></tr>`).join("") +
+    `</tbody></table>` : "None";
+
+  const al = j.alerts || [];
+  $("alerts").innerHTML = al.length ? al.map((e) => `<li><span class="k ${e.kind}">${esc(e.kind)}</span> · ${hhmmss(e.ts)}<div class="why">${esc(JSON.stringify(e.data)).slice(0, 160)}</div></li>`).join("") : `<li class="empty">None yet</li>`;
+
+  $("updated").textContent = "Updated " + new Date().toLocaleTimeString();
+  $("banner").hidden = true;
+}
+
+function drawChart(pm) {
+  const kinds = [["order", "var(--good)"], ["dry_order", "var(--accent)"], ["blocked", "var(--muted)"]];
+  const n = 60, W = 600, H = 90, bw = W / n;
+  const tot = Array.from({ length: n }, (_, i) => kinds.reduce((s, [k]) => s + ((pm[k] || [])[i] || 0), 0));
+  const max = Math.max(1, ...tot);
+  let out = "";
+  for (let i = 0; i < n; i++) {
+    let y = H;
+    for (const [k, col] of kinds) {
+      const v = (pm[k] || [])[i] || 0;
+      if (!v) continue;
+      const h = (v / max) * (H - 4);
+      y -= h;
+      out += `<rect x="${i * bw + 1}" y="${y}" width="${bw - 2}" height="${h}" fill="${col}" rx="1.5"><title>${v} ${k.replace("_", " ")}, ${60 - i} min ago</title></rect>`;
+    }
+  }
+  $("chart").innerHTML = out || `<text x="300" y="50" text-anchor="middle" fill="var(--muted)" font-size="13">No activity in the last hour</text>`;
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    render(await r.json());
+  } catch (e) {
+    pill($("runPill"), "bad", "Dashboard server not reachable");
+    $("banner").textContent = "Can't reach the dashboard server. Is `python3 -m cupbot dashboard` still running?";
+    $("banner").hidden = false;
+  }
+}
+
+$("killBtn").onclick = async () => {
+  const msg = killOn ? "Clear the kill switch and let the bot trade again?" : "Turn on the kill switch? The bot cancels all orders and stops trading.";
+  if (!confirm(msg)) return;
+  await fetch(killOn ? "/api/unkill" : "/api/kill", { method: "POST" });
+  tick();
+};
+
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>
