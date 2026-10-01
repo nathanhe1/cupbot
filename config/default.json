@@ -2,12 +2,17 @@
   "_comment": "Overrides for cupbot/config.py defaults. Anything not listed here uses the default. Secrets go in .env, never here.",
   "venue": {
     "price_scale": 1.0,
-    "live_trading_enabled": false
+    "live_trading_enabled": true
   },
   "analyst": {
     "enabled": false
   },
   "risk": {
     "max_orders_per_minute": 25
+  },
+  "strategy": {
+    "_comment": "Oct 1 first live day: per-order and per-market caps at a quarter of normal (0.05 / 0.20).",
+    "max_order_frac": 0.0125,
+    "max_market_frac": 0.05
   }
 }

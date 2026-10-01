@@ -265,7 +265,7 @@ class SuperMarketExchange(Exchange):
             payload["price"] = self._price_on_tick(req.price, req.side)
             if req.tif == TimeInForce.IOC:
                 # no IOC flag on this API: a short expiry stops a taking order from resting
-                exp = datetime.now(timezone.utc) + timedelta(seconds=5)
+                exp = datetime.now(timezone.utc) + timedelta(seconds=20)  # Mac clock measured ~5 s off the venue
                 payload["expirationDate"] = exp.isoformat().replace("+00:00", "Z")
         self._placed[req.client_id] = {"exchangeId": req.market_id, "quantity": int(req.qty),
                                        "price": payload.get("price"), "ts": time.time()}
