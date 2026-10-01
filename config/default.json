@@ -11,8 +11,11 @@
     "max_orders_per_minute": 25
   },
   "strategy": {
-    "_comment": "Oct 1 first live day: per-order and per-market caps at a quarter of normal (0.05 / 0.20).",
+    "_comment": "Oct 1: quarter caps for the first live day. Kelly 0.5, min_edge 0.05, min_roc 0.05 chosen from sims calibrated to the real Cup (MM within ~1 pt of anchors): break-even if the Cup never lags, same profit as before if it does, far smaller worst case. Lag trades still use lag_min_edge.",
     "max_order_frac": 0.0125,
-    "max_market_frac": 0.05
+    "max_market_frac": 0.05,
+    "kelly_mult": 0.5,
+    "min_edge": 0.05,
+    "min_roc": 0.05
   }
 }

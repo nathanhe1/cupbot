@@ -242,6 +242,19 @@ class TestStrategy(unittest.TestCase):
         self.assertEqual(o[0].side, Side.SELL)
         self.assertAlmostEqual(o[0].price, 0.33)
 
+    def test_min_roc_skips_near_certain_contracts(self):
+        s = Strategy(StrategyConfig(min_edge=0.02, uncertainty_mult=0.0, min_roc=0.05), self.markets)
+        # 97c for a 99.5% favourite: 2.5 points of edge but only ~2.6% on the capital
+        self.assertEqual(s.decide({"A": FairQuote(0.995, 0.0)}, {"A": self.book(0.95, 0.97)},
+                                  Account(10000), 10000, "pre"), [])
+        # the NO side of a 1% longshot bid at 4c: same thing mirrored
+        self.assertEqual(s.decide({"A": FairQuote(0.01, 0.0)}, {"A": self.book(0.04, 0.06)},
+                                  Account(10000), 10000, "pre"), [])
+        # mid-range trades are unaffected: limit 0.67 still clears 5% on capital
+        o = s.decide({"A": FairQuote(0.70, 0.0)}, {"A": self.book(0.55, 0.60)}, Account(10000), 10000, "pre")
+        self.assertEqual(o[0].side, Side.BUY)
+        self.assertLessEqual(o[0].price, 0.70 / 1.05 + 1e-9)
+
     def test_threshold_rules(self):
         s = Strategy(StrategyConfig(min_edge=0.02, gap_buffer=0.01, lag_min_edge=0.015, lag_move=0.02,
                                     uncertainty_mult=0.0), self.markets)
@@ -332,7 +345,7 @@ class TestBasket(unittest.TestCase):
 class TestConfig(unittest.TestCase):
     def test_default_json_loads_and_live_disabled(self):
         cfg = load_config(os.path.join(os.path.dirname(__file__), "..", "config", "default.json"))
-        self.assertFalse(cfg.venue.live_trading_enabled)
+        self.assertFalse(BotConfig().venue.live_trading_enabled)   # code default stays off; the json is the switch
 
     def test_unknown_key_rejected(self):
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:

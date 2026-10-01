@@ -97,6 +97,10 @@ class RiskManager:
         if equity <= 0:
             return False, "equity: non-positive"
         mid = book.mid if book is not None else None
+        if mid is not None and book.best_bid is not None and book.best_ask is not None \
+                and book.best_ask - book.best_bid > c.max_price_deviation:
+            # lopsided book: the mid means nothing, check against the price we would trade with
+            mid = book.best_ask if req.side == Side.BUY else book.best_bid
         if mid is not None and not self.relax_price_band and abs(req.price - mid) > c.max_price_deviation:
             return False, "price: outside sanity band"
         new_pos = pos + (req.qty if req.side == Side.BUY else -req.qty)

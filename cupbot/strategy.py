@@ -1,7 +1,9 @@
 """Rule-based strategy: fair values + books + account -> desired orders.
 
 Deterministic, no LLM, no I/O. Rules, in order:
-  1. Take mispricings: buy when ask <= fair - threshold, sell when bid >= fair + threshold.
+  1. Take mispricings: buy when ask <= fair - threshold, sell when bid >= fair + threshold,
+     and only when the expected return on the capital tied up until settlement is at
+     least min_roc (stops 97c buys of 99% favourites that lock up cash for 1-2 points).
      Threshold = min_edge + uncertainty_mult * fair-value uncertainty. The limit
      price is the worst price that still clears the threshold, so the order sweeps
      stale student orders and stops before the edge is gone. Size = fractional
@@ -105,7 +107,8 @@ class Strategy:
 
             # 1a. buy YES
             if ask is not None and fq.p - ask >= thr - 1e-9:
-                limit = floor_tick(fq.p - thr)
+                # also demand min_roc return on the capital tied up: limit <= fair / (1 + min_roc)
+                limit = floor_tick(min(fq.p - thr, fq.p / (1 + c.min_roc)))
                 if limit >= ask - 1e-9:
                     f = min(kmult * kelly_yes(fq.p, limit), mfrac)
                     target_qty = f * equity / limit * size_mult
@@ -117,7 +120,8 @@ class Strategy:
                         continue
             # 1b. sell YES (buy NO)
             if bid is not None and bid - fq.p >= thr - 1e-9:
-                limit = ceil_tick(fq.p + thr)
+                # NO costs 1 - limit and returns limit - fair: limit >= (fair + min_roc) / (1 + min_roc)
+                limit = ceil_tick(max(fq.p + thr, (fq.p + c.min_roc) / (1 + c.min_roc)))
                 if limit <= bid + 1e-9:
                     f = min(kmult * kelly_no(fq.p, limit), mfrac)
                     target_qty = f * equity / (1 - limit) * size_mult
