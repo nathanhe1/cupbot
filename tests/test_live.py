@@ -321,3 +321,44 @@ class TestUnattended(unittest.TestCase):
             await asyncio.wait_for(eng.run(), timeout=5)
         run(go())
         self.assertTrue(eng.stopping)
+
+
+class TestDepthBeforeTrade(unittest.TestCase):
+    def test_orders_sized_against_real_depth(self):
+        """With a venue whose snapshot has no sizes, the engine reads the book of each market it
+        wants to trade and sizes against it, never against the guessed snapshot size."""
+        from cupbot.config import BotConfig
+        from cupbot.sim.world import TICK_S, SimParams, SimWorld
+        from cupbot.types import Level, OrderBook
+        w = SimWorld(RACES, SimParams(seed=4))
+        cfg = BotConfig()
+        cfg.open_ts, cfg.election_ts = 0.0, w.pre_ticks * TICK_S
+        eng = Engine(cfg, w.exchange, w, RaceModel.from_json(RACES, ModelParams(n_draws=300)), w.markets)
+        eng.dry_run = True
+        real = w.exchange.get_books
+        reads = []
+
+        async def books_big(ids):   # snapshot claims huge size everywhere
+            out = await real(ids)
+            return {m: OrderBook(m, [Level(b.bids[0].price, 1e9)] if b.bids else [],
+                                 [Level(b.asks[0].price, 1e9)] if b.asks else []) for m, b in out.items()}
+
+        async def depth(mid):       # the real book only has 3 shares at each price
+            reads.append(mid)
+            b = (await real([mid]))[mid]
+            return OrderBook(mid, [Level(l.price, 3) for l in b.bids], [Level(l.price, 3) for l in b.asks])
+        w.exchange.get_books = books_big
+        w.exchange.get_book_depth = depth
+        w.exchange.bbo_sizes_unknown = True
+        logged = []
+        eng.journal.log = lambda kind, d: logged.append((kind, d))
+        w.start()
+        for _ in range(40):
+            run(eng.step())
+            w.advance() if hasattr(w, "advance") else None
+        trades = [d for k, d in logged if k in ("dry_order", "blocked")]
+        if trades:
+            self.assertTrue(reads)
+            # 3 shares per level: an order may sweep a few levels, never the 1e9 snapshot size
+            self.assertTrue(all(d["qty"] <= 30 for d in trades), trades[:3])
+            self.assertTrue(all(d["market"] in reads for d in trades))

@@ -53,6 +53,7 @@ def _get(d: Dict[str, Any], *keys: str, default=None):
 
 class SuperMarketExchange(Exchange):
     name = "supermarket"
+    bbo_sizes_unknown = True   # /exchanges/prices has no sizes; the engine reads depth before trading
 
     def __init__(self, cfg: VenueConfig, allow_orders: bool = False, api_key: Optional[str] = None):
         key = api_key if api_key is not None else os.environ.get(cfg.api_key_env, "")

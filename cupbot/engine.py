@@ -312,6 +312,16 @@ class Engine:
         damp = self._first_move_damp(now, fairs)
         orders = self.strategy.decide(fairs, books, acct, equity, phase, self.prev_fairs, self.kelly_scale,
                                       venue_gap=gaps, anchor_moves=moves, damp=damp)
+        if orders and getattr(self.ex, "bbo_sizes_unknown", False):
+            # The bulk snapshot has no sizes: read the real book of each market we want to
+            # trade (in parallel), then size against it. Markets not read this step wait.
+            want = list(dict.fromkeys(o.market_id for o in orders))[:self.cfg.strategy.depth_reads_per_step]
+            got = await asyncio.gather(*(self.ex.get_book_depth(m) for m in want), return_exceptions=True)
+            fresh = {m: b for m, b in zip(want, got) if not isinstance(b, Exception)}
+            books.update(fresh)
+            orders = [o for o in self.strategy.decide(fairs, books, acct, equity, phase, self.prev_fairs,
+                                                      self.kelly_scale, venue_gap=gaps, anchor_moves=moves,
+                                                      damp=damp) if o.market_id in fresh]
         orders = self._basket_orders(now, phase, fairs, books, acct, marks, equity, orders)
         if self.cfg.strategy.passive_quotes:
             await self.ex.cancel_all()

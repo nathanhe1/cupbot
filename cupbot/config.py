@@ -26,6 +26,7 @@ class FairValueConfig:
 
 @dataclass
 class StrategyConfig:
+    depth_reads_per_step: int = 4    # live venue without sizes in its snapshot: books read before trading
     min_edge: float = 0.02           # minimum edge after crossing the spread (prob points)
     gap_buffer: float = 0.01         # ...and at least (Kalshi-Polymarket gap + this) on static trades
     lag_min_edge: float = 0.015      # when the anchor just moved >= 2 ticks and the Cup hasn't followed
