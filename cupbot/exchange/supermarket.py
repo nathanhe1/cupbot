@@ -282,6 +282,8 @@ class SuperMarketExchange(Exchange):
         total = float(_get(body, "totalCost", default=0) or 0)
         fp = _get(body, "fillPrice")
         avg = float(fp) if fp is not None else (total / filled if filled else 0.0)
+        if filled and str(body.get("side", "yes")).lower() == "no":
+            avg = 1 - avg   # a sell canonicalized to "buy NO" reports the NO price
         if filled >= int(req.qty) - 1e-9:
             st = OrderStatus.FILLED
         elif filled > 0:
@@ -330,6 +332,8 @@ class SuperMarketExchange(Exchange):
             fp = _get(d, "fillPrice")
             avg = float(fp) if fp is not None else (float(_get(d, "totalCost", default=0) or 0) / filled
                                                     if filled else 0.0)
+            if filled and str(d.get("side", "yes")).lower() == "no":
+                avg = 1 - avg
             st = OrderStatus.ACKED if d.get("open") else (OrderStatus.FILLED if filled else OrderStatus.CANCELLED)
             out[i] = OrderResult(reqs[i].client_id, st, filled, avg, venue_order_id=str(_get(d, "orderId", default="")))
         return out
