@@ -54,6 +54,32 @@ class StrategyConfig:
 
 
 @dataclass
+class LadderConfig:
+    """Resting limit orders around the Cup's own consensus price (cupbot/ladder.py).
+    Cup prints 3-10 points off the 1 h VWAP revert within ~30 min (Oct 3 tapes), so
+    standing bids below and asks above the consensus collect that flow."""
+    enabled: bool = True
+    markets_file: str = "data/ladder_markets.json"   # ranked list; empty/missing = all mapped markets
+    max_markets: int = 60
+    # two levels a side: every resting order counts against risk.max_orders_per_minute
+    offsets: list = field(default_factory=lambda: [0.03, 0.06])            # anchored markets
+    offsets_unanchored: list = field(default_factory=lambda: [0.045, 0.09])
+    weights: list = field(default_factory=lambda: [0.45, 0.55])           # share of side budget
+    total_frac: float = 0.6          # sum over markets of one side's resting notional, x equity
+    max_pos_frac: float = 0.04       # ladder never builds a position past this notional, x equity
+    fair_guard: float = 0.01         # anchored: open longs only <= fair - this, shorts only >= fair + this
+    ema_half_life_s: float = 2700.0  # consensus = EMA of the Cup mid, seeded from the 5 h VWAP
+    max_spread_for_mid: float = 0.03 # mids from wider books don't move the consensus
+    pause_dev: float = 0.15          # mid this far from consensus: pull quotes (regime change)
+    requote_move: float = 0.01       # requote when consensus or fair moved this much
+    requote_age_s: float = 1200.0
+    expire_s: float = 1800.0         # venue-side expiry: nothing outlives a dead bot by long
+    writes_per_min: float = 14.0     # share of the 30/min write budget
+    orders_reserve: int = 6          # leave this many of risk.max_orders_per_minute for taking orders
+    min_qty: int = 5
+
+
+@dataclass
 class RiskConfig:
     max_order_notional: float = 15_000
     max_market_notional_frac: float = 0.35   # hard ceiling above the strategy's own caps
@@ -91,6 +117,8 @@ class VenueConfig:
         "orders": "/orders",
         "cancel": "/orders/{order_id}",
         "cancel_all": "/orders/cancel-all",
+        "batch": "/orders/batch",
+        "history": "/exchanges/{market_id}/price-history",
     })
 
 
@@ -139,8 +167,10 @@ class BotConfig:
     open_ts: float = 1790870400.0      # 2026-10-01 16:00 UTC (noon ET)
     election_ts: float = 1793746800.0  # 2026-11-03 23:00 UTC (6pm ET, first polls close)
     journal_path: str = "journal/journal.sqlite"
+    self_tune: bool = True            # live: cupbot/tuner.py re-tunes min_edge / Kelly every 15 min
     fair: FairValueConfig = field(default_factory=FairValueConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
+    ladder: LadderConfig = field(default_factory=LadderConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     venue: VenueConfig = field(default_factory=VenueConfig)
     analyst: AnalystConfig = field(default_factory=AnalystConfig)

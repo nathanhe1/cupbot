@@ -240,7 +240,7 @@ class SuperMarketExchange(Exchange):
                 q = float(_get(p, "quantity", default=0))
             if q:
                 positions[mid] = positions.get(mid, 0.0) + q
-        return Account(cash, positions)
+        return Account(cash, positions, no_shares=True)
 
     # ---------------------------------------------------------- write side
     def _price_on_tick(self, price: float, side: Side) -> float:
@@ -292,6 +292,58 @@ class SuperMarketExchange(Exchange):
             st = OrderStatus.CANCELLED   # e.g. self-trade prevented, or a taking order with nothing to hit
         return OrderResult(req.client_id, st, filled, avg / self.cfg.price_scale,
                            venue_order_id=str(_get(body, "orderId", default="")))
+
+    async def place_batch(self, reqs: Sequence[OrderRequest], expire_s: float) -> List[OrderResult]:
+        """Resting limit orders, up to 50 per write (POST /orders/batch). Each carries a
+        venue-side expiry so nothing outlives a dead bot by long. Per-item failures come
+        back as REJECTED; a whole-request failure as UNKNOWN for every item (the ladder
+        cancels the market before it requotes, so nothing is resent blindly)."""
+        if not self.allow_orders:
+            raise LiveTradingDisabled("live orders are disabled (config venue.live_trading_enabled + --live)")
+        exp = (datetime.now(timezone.utc) + timedelta(seconds=expire_s)).isoformat().replace("+00:00", "Z")
+        items = []
+        for r in reqs:
+            it: Dict[str, Any] = {"exchangeId": r.market_id, "side": "yes",
+                                  "action": "buy" if r.side == Side.BUY else "sell",
+                                  "quantity": int(r.qty), "price": self._price_on_tick(r.price, r.side),
+                                  "expirationDate": exp}
+            if self.cfg.tournament_id:
+                it["tournamentId"] = self.cfg.tournament_id
+            items.append(it)
+        key = reqs[0].client_id + f"-b{len(reqs)}"
+        try:
+            body = await self._request("POST", "batch", write=True, json={"idempotencyKey": key, "orders": items},
+                                       retries=0)
+        except (asyncio.TimeoutError, RuntimeError) as e:
+            return [OrderResult(r.client_id, OrderStatus.UNKNOWN, error=str(e)[:200]) for r in reqs]
+        results = body.get("results", []) if isinstance(body, dict) else []
+        out = [OrderResult(r.client_id, OrderStatus.UNKNOWN) for r in reqs]
+        for res in results:
+            i = res.get("index")
+            if not isinstance(i, int) or not 0 <= i < len(reqs):
+                continue
+            if not res.get("ok"):
+                out[i] = OrderResult(reqs[i].client_id, OrderStatus.REJECTED, error=str(res.get("data"))[:200])
+                continue
+            d = res.get("data") or {}
+            filled = float(_get(d, "quantityTraded", default=0) or 0)
+            fp = _get(d, "fillPrice")
+            avg = float(fp) if fp is not None else (float(_get(d, "totalCost", default=0) or 0) / filled
+                                                    if filled else 0.0)
+            st = OrderStatus.ACKED if d.get("open") else (OrderStatus.FILLED if filled else OrderStatus.CANCELLED)
+            out[i] = OrderResult(reqs[i].client_id, st, filled, avg, venue_order_id=str(_get(d, "orderId", default="")))
+        return out
+
+    async def get_vwap(self, market_id: str, hours: int = 5) -> Optional[float]:
+        """Volume-weighted price of the last `hours` hourly candles (the Cup's valuation
+        price is a 5 h VWAP), or None without trades."""
+        body = await self._request("GET", "history", params={"resolution": "1h", "limit": hours},
+                                   market_id=market_id)
+        cs = (body.get("candles") or []) if isinstance(body, dict) else []
+        v = sum(float(c.get("volume") or 0) for c in cs)
+        if v <= 0:
+            return None
+        return sum(float(c["vwap"]) * float(c.get("volume") or 0) for c in cs if c.get("vwap") is not None) / v
 
     async def open_orders(self) -> List[Dict]:
         body = await self._request("GET", "orders", params={"status": "open", "limit": 200})

@@ -132,6 +132,12 @@ async def run_live(cfg: BotConfig, live_orders: bool, run_seconds: Optional[floa
     if live_orders:
         n = await ex.cancel_all()   # start from a clean book after a crash/restart
         print(f"cancelled {n} leftover resting orders at start")
+    if engine.ladder is not None:
+        # seed each ladder market's consensus with the 5 h VWAP the scoreboard marks at
+        ids = engine.ladder.ids
+        got = await asyncio.gather(*(ex.get_vwap(m) for m in ids), return_exceptions=True)
+        engine.ladder.seed({m: v for m, v in zip(ids, got) if not isinstance(v, Exception)})
+        print(f"ladder: {len(engine.ladder.ref)} of {len(ids)} markets seeded from the 5 h VWAP")
     stop_cmds = threading.Event()
     if notifier:
         threading.Thread(target=notifier.listen_commands, args=(_command_handler(cfg, engine), stop_cmds),

@@ -23,6 +23,8 @@ from .journal import NullJournal
 from .racemodel import RaceModel
 from .risk import RiskManager
 from .strategy import Strategy
+from .tuner import Tuner
+from .ladder import Ladder
 from .tournament import (bar_per_scenario, best_scale, candidate_baskets, chamber_outcomes,
                          plan_basket, scenario_payoffs)
 from .types import OrderRequest
@@ -74,6 +76,11 @@ class Engine:
         self.wake = asyncio.Event() if _has_loop() else None
         self.last_marks: Dict[str, float] = {}
         self.night_model: Optional[LiveResultsModel] = None
+        # live only: nudges min_edge / Kelly from fill markouts (the sim keeps fixed settings)
+        self.tuner: Optional[Tuner] = Tuner(cfg.strategy, self.journal) if cfg.self_tune and not dry_run else None
+        # live venue only (the simulator's exchange has no batch orders)
+        self.ladder: Optional[Ladder] = Ladder(cfg.ladder, self.markets, self.journal) \
+            if cfg.ladder.enabled and hasattr(exchange, "place_batch") else None
 
     # ------------------------------------------------------------------
     def elapsed_frac(self, now: float) -> float:
@@ -306,6 +313,8 @@ class Engine:
         self.fair.anchor_gap = self.feeds.anchor_disagreement()
         fairs = self.fair.compute(now, model_pd, self.feeds.anchors(), mids, live)
 
+        if self.tuner is not None:
+            self.tuner.maybe_tune(now, {m: f.p for m, f in fairs.items()}, equity)
         self._tournament_scale(phase, acct, marks, equity)
         gaps = self.feeds.anchor_disagreement()
         moves = self.feeds.anchor_moves()
@@ -353,17 +362,69 @@ class Engine:
             if not fills and res.filled_qty > 0:     # venues that report only totals
                 fills = [(o.side, res.filled_qty, res.avg_price or o.price)]
             for side, qty, px in fills:
-                sgn = 1 if side == Side.BUY else -1
-                acct.cash -= sgn * qty * px
-                acct.positions[o.market_id] = acct.pos(o.market_id) + sgn * qty
+                acct.apply_fill(o.market_id, side, qty, px)
+                if self.tuner is not None:
+                    self.tuner.on_fill(now, o.market_id, 1 if side == Side.BUY else -1, qty, px)
                 self.stats.fills += 1
                 self.stats.volume += qty * px
             self.journal.log("order", {"client_id": o.client_id, "market": o.market_id, "side": o.side.value,
                                        "qty": o.qty, "price": o.price, "status": res.status.value,
                                        "filled": res.filled_qty, "avg": res.avg_price, "reason": o.reason,
                                        "fair": fairs.get(o.market_id).p if o.market_id in fairs else None})
+        if self.ladder is not None:
+            await self._ladder_step(now, fairs, books, acct, marks, equity)
         self.prev_fairs = fairs
         self.last_fairs = fairs
+
+    async def _ladder_step(self, now, fairs, books, acct, marks, equity) -> None:
+        """Requote the resting ladder (cupbot/ladder.py) on the markets that need it most,
+        within the ladder's write budget and what's left of the orders-per-minute cap."""
+        lad = self.ladder
+        lad.update_refs(books)
+        if self.risk.state.halted:
+            return
+        chosen, quotes = lad.plan(fairs, books, acct, equity)
+        if not chosen:
+            return
+        recent = sum(1 for t in self.risk._order_times if t > now - 60)
+        allowance = self.cfg.risk.max_orders_per_minute - recent - self.cfg.ladder.orders_reserve
+        sent: Dict[str, list] = {}
+        reqs: List[OrderRequest] = []
+        for m in chosen:
+            if not self.dry_run:
+                try:
+                    await self.ex.cancel_all(m)
+                except Exception as e:
+                    self.journal.log("error", {"ladder_cancel": m, "error": repr(e)[:300]})
+                    continue
+            sent[m] = []
+            for o in lad.orders_for({m: quotes[m]}, now, self._cid):
+                if allowance <= 0:
+                    break
+                ok, why = self.risk.check(o, acct, books.get(m), marks, equity, now)
+                if not ok:
+                    self.stats.orders_blocked += 1
+                    continue
+                allowance -= 1
+                reqs.append(o)
+                sent[m].append(("buy" if o.side == Side.BUY else "sell", o.price, int(o.qty)))
+        for m, qs in sent.items():
+            lad.mark_quoted(m, qs, fairs.get(m), acct.pos(m), now)
+        summary = {m: [f"{s[0][0]}{s[2]}@{s[1]:.3f}" for s in qs] for m, qs in sent.items()}
+        if self.dry_run or not reqs:
+            self.journal.log("ladder", {"dry": self.dry_run, "quotes": summary})
+            return
+        filled = 0
+        for i in range(0, len(reqs), 50):
+            res = await self.ex.place_batch(reqs[i:i + 50], self.cfg.ladder.expire_s)
+            for o, r in zip(reqs[i:i + 50], res):
+                self.stats.orders_sent += 1
+                if r.filled_qty > 0:   # crossed on arrival (book moved since the snapshot)
+                    acct.apply_fill(o.market_id, o.side, r.filled_qty, r.avg_price or o.price)
+                    filled += 1
+        bad = sum(1 for r in res if r.status.value in ("rejected", "unknown"))
+        self.journal.log("ladder", {"quotes": summary, "orders": len(reqs), "filled_on_entry": filled,
+                                    "failed_last_batch": bad})
 
     async def run(self, stop_after_s: Optional[float] = None) -> None:
         """Live loop: step on a timer, or immediately when a feed calls `poke()`."""

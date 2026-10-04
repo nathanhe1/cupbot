@@ -1,0 +1,405 @@
+{
+ "_README": "Markets the resting-order ladder quotes, ranked by recent volume x hourly range (Oct 2 20:00 - Oct 4 02:00 UTC). Ranked from GET /exchanges/{id}/price-history candles.",
+ "markets": [
+  {
+   "id": "1074",
+   "title": "Will the Republican Party win the Rhode Island Gov",
+   "score": 102290
+  },
+  {
+   "id": "1077",
+   "title": "Will the Republican Party win the Rhode Island Sen",
+   "score": 73975
+  },
+  {
+   "id": "840",
+   "title": "Will the Democratic Party win the U.S. House?",
+   "score": 58948
+  },
+  {
+   "id": "949",
+   "title": "Will the Democratic Party win the Iowa Senate?",
+   "score": 44528
+  },
+  {
+   "id": "983",
+   "title": "Will the Republican Party win the Texas Senate?",
+   "score": 42159
+  },
+  {
+   "id": "1071",
+   "title": "Will the Republican Party win the New Hampshire Se",
+   "score": 36381
+  },
+  {
+   "id": "1047",
+   "title": "Will the Democratic Party win the Michigan Senate?",
+   "score": 33677
+  },
+  {
+   "id": "872",
+   "title": "Will the Republican Party win the Nevada Governor?",
+   "score": 32169
+  },
+  {
+   "id": "960",
+   "title": "Will the Republican Party win the Maine Senate?",
+   "score": 31782
+  },
+  {
+   "id": "950",
+   "title": "Will the Republican Party win the Iowa Senate?",
+   "score": 30530
+  },
+  {
+   "id": "982",
+   "title": "Will the Democratic Party win the Texas Senate?",
+   "score": 28974
+  },
+  {
+   "id": "958",
+   "title": "Will the Republican Party win the Louisiana Senate",
+   "score": 23187
+  },
+  {
+   "id": "964",
+   "title": "Will the Republican Party win the Montana Senate?",
+   "score": 21177
+  },
+  {
+   "id": "1051",
+   "title": "Will the Democratic Party win the Tennessee Senate",
+   "score": 19671
+  },
+  {
+   "id": "854",
+   "title": "Will the Republican Party win the Connecticut Gove",
+   "score": 19381
+  },
+  {
+   "id": "864",
+   "title": "Will the Republican Party win the Maryland Governo",
+   "score": 17068
+  },
+  {
+   "id": "1048",
+   "title": "Will the Republican Party win the Michigan Senate?",
+   "score": 16557
+  },
+  {
+   "id": "1067",
+   "title": "Will the Republican Party win the Alaska Senate?",
+   "score": 16404
+  },
+  {
+   "id": "1031",
+   "title": "Will the Democratic Party win the VA-01 House race",
+   "score": 15753
+  },
+  {
+   "id": "1076",
+   "title": "Will the Democratic Party win the Rhode Island Sen",
+   "score": 15732
+  },
+  {
+   "id": "984",
+   "title": "Will the Democratic Party win the Virginia Senate?",
+   "score": 15649
+  },
+  {
+   "id": "885",
+   "title": "Will the Republican Party win the Texas Governor?",
+   "score": 15500
+  },
+  {
+   "id": "957",
+   "title": "Will the Democratic Party win the Louisiana Senate",
+   "score": 15274
+  },
+  {
+   "id": "961",
+   "title": "Will the Democratic Party win the Mississippi Sena",
+   "score": 15007
+  },
+  {
+   "id": "1030",
+   "title": "Will the Republican Party win the TN-05 House race",
+   "score": 13928
+  },
+  {
+   "id": "987",
+   "title": "Will the Democratic Party win the Connecticut Gove",
+   "score": 13652
+  },
+  {
+   "id": "1045",
+   "title": "Will the Democratic Party win the Kansas Senate?",
+   "score": 12969
+  },
+  {
+   "id": "1046",
+   "title": "Will the Republican Party win the Kansas Senate?",
+   "score": 12869
+  },
+  {
+   "id": "1066",
+   "title": "Will the Democratic Party win the Alaska Senate?",
+   "score": 11969
+  },
+  {
+   "id": "1070",
+   "title": "Will the Democratic Party win the New Hampshire Se",
+   "score": 11687
+  },
+  {
+   "id": "959",
+   "title": "Will the Democratic Party win the Maine Senate?",
+   "score": 11025
+  },
+  {
+   "id": "908",
+   "title": "Will the Democratic Party win the KY-04 House race",
+   "score": 10024
+  },
+  {
+   "id": "1033",
+   "title": "Will the Democratic Party win the VA-05 House race",
+   "score": 9246
+  },
+  {
+   "id": "1075",
+   "title": "Will the Republican Party win the Delaware Senate?",
+   "score": 7498
+  },
+  {
+   "id": "846",
+   "title": "Will the Democratic Party win the Arkansas Governo",
+   "score": 7329
+  },
+  {
+   "id": "973",
+   "title": "Will the Democratic Party win the New Mexico Senat",
+   "score": 7167
+  },
+  {
+   "id": "842",
+   "title": "Will the Democratic Party win the U.S. Senate?",
+   "score": 6077
+  },
+  {
+   "id": "994",
+   "title": "Will the Democratic Party win the Michigan Governo",
+   "score": 5883
+  },
+  {
+   "id": "1018",
+   "title": "Will the Republican Party win the FL-22 House race",
+   "score": 5876
+  },
+  {
+   "id": "967",
+   "title": "Will the Republican Party win the North Carolina S",
+   "score": 5665
+  },
+  {
+   "id": "1061",
+   "title": "Will the Democratic Party win the New Hampshire Go",
+   "score": 5407
+  },
+  {
+   "id": "1069",
+   "title": "Will the Republican Party win the Massachusetts Se",
+   "score": 5376
+  },
+  {
+   "id": "909",
+   "title": "Will the Republican Party win the KY-04 House race",
+   "score": 5211
+  },
+  {
+   "id": "1000",
+   "title": "Will the Republican Party win the Tennessee Govern",
+   "score": 5116
+  },
+  {
+   "id": "851",
+   "title": "Will the Republican Party win the California Gover",
+   "score": 4551
+  },
+  {
+   "id": "938",
+   "title": "Will the Republican Party win the VA-01 House race",
+   "score": 4224
+  },
+  {
+   "id": "1041",
+   "title": "Will the Republican Party win the WI-03 House race",
+   "score": 4063
+  },
+  {
+   "id": "991",
+   "title": "Will the Republican Party win the Hawaii Governor?",
+   "score": 3987
+  },
+  {
+   "id": "843",
+   "title": "Will the Republican Party win the U.S. Senate?",
+   "score": 3884
+  },
+  {
+   "id": "1060",
+   "title": "Will the Republican Party win the Massachusetts Go",
+   "score": 3533
+  },
+  {
+   "id": "870",
+   "title": "Will the Republican Party win the New Mexico Gover",
+   "score": 3437
+  },
+  {
+   "id": "841",
+   "title": "Will the Republican Party win the U.S. House?",
+   "score": 3349
+  },
+  {
+   "id": "884",
+   "title": "Will the Democratic Party win the Texas Governor?",
+   "score": 3344
+  },
+  {
+   "id": "1072",
+   "title": "Will the Democratic Party win the Oklahoma Senate?",
+   "score": 3122
+  },
+  {
+   "id": "1040",
+   "title": "Will the Democratic Party win the WI-03 House race",
+   "score": 3076
+  },
+  {
+   "id": "1073",
+   "title": "Will the Democratic Party win the Rhode Island Gov",
+   "score": 2930
+  },
+  {
+   "id": "970",
+   "title": "Will the Republican Party win the Nebraska Senate?",
+   "score": 2924
+  },
+  {
+   "id": "972",
+   "title": "Will the Republican Party win the New Jersey Senat",
+   "score": 2817
+  },
+  {
+   "id": "998",
+   "title": "Will the Republican Party win the South Dakota Gov",
+   "score": 2762
+  },
+  {
+   "id": "855",
+   "title": "Will the Democratic Party win the Georgia Governor",
+   "score": 2638
+  },
+  {
+   "id": "879",
+   "title": "Will the Republican Party win the Pennsylvania Gov",
+   "score": 2573
+  },
+  {
+   "id": "986",
+   "title": "Will the Republican Party win the West Virginia Se",
+   "score": 2480
+  },
+  {
+   "id": "875",
+   "title": "Will the Democratic Party win the Oklahoma Governo",
+   "score": 2225
+  },
+  {
+   "id": "1025",
+   "title": "Will the Democratic Party win the MN-02 House race",
+   "score": 2032
+  },
+  {
+   "id": "1017",
+   "title": "Will the Democratic Party win the FL-22 House race",
+   "score": 1980
+  },
+  {
+   "id": "1065",
+   "title": "Will the Republican Party win the NH-01 House race",
+   "score": 1921
+  },
+  {
+   "id": "850",
+   "title": "Will the Democratic Party win the California Gover",
+   "score": 1877
+  },
+  {
+   "id": "996",
+   "title": "Will the Democratic Party win the Minnesota Govern",
+   "score": 1868
+  },
+  {
+   "id": "1042",
+   "title": "Will the Democratic Party win the Delaware Senate?",
+   "score": 1840
+  },
+  {
+   "id": "1058",
+   "title": "Will the Republican Party win the Alaska Governor?",
+   "score": 1717
+  },
+  {
+   "id": "1062",
+   "title": "Will the Republican Party win the New Hampshire Go",
+   "score": 1692
+  },
+  {
+   "id": "999",
+   "title": "Will the Democratic Party win the Tennessee Govern",
+   "score": 1615
+  },
+  {
+   "id": "871",
+   "title": "Will the Democratic Party win the Nevada Governor?",
+   "score": 1595
+  },
+  {
+   "id": "997",
+   "title": "Will the Republican Party win the Minnesota Govern",
+   "score": 1504
+  },
+  {
+   "id": "1034",
+   "title": "Will the Republican Party win the VA-05 House race",
+   "score": 1491
+  },
+  {
+   "id": "1057",
+   "title": "Will the Democratic Party win the Alaska Governor?",
+   "score": 1462
+  },
+  {
+   "id": "1037",
+   "title": "Will the Republican Party win the WA-03 House race",
+   "score": 1448
+  },
+  {
+   "id": "910",
+   "title": "Will the Democratic Party win the ME-02 House race",
+   "score": 1414
+  },
+  {
+   "id": "1064",
+   "title": "Will the Democratic Party win the NH-01 House race",
+   "score": 1370
+  },
+  {
+   "id": "1043",
+   "title": "Will the Democratic Party win the Florida Senate?",
+   "score": 1287
+  }
+ ]
+}

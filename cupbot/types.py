@@ -126,6 +126,9 @@ class OrderResult:
 class Account:
     cash: float
     positions: Dict[str, float] = field(default_factory=dict)  # market_id -> signed YES qty
+    # True on venues where a short is a bought NO (the Cup): opening it costs 1 - price
+    # in cash and it is worth 1 - mark. False: the simulator's credit-the-proceeds shorts.
+    no_shares: bool = False
 
     def pos(self, market_id: str) -> float:
         return self.positions.get(market_id, 0.0)
@@ -134,8 +137,25 @@ class Account:
         """Equity with positions marked at the given prices (missing marks -> 0.5)."""
         eq = self.cash
         for mid, q in self.positions.items():
-            eq += q * marks.get(mid, 0.5)
+            m = marks.get(mid, 0.5)
+            eq += (-q) * (1 - m) if (q < 0 and self.no_shares) else q * m
         return eq
+
+    def apply_fill(self, market_id: str, side: "Side", qty: float, price: float) -> None:
+        """Track a fill locally between account refreshes, with the venue's cash convention."""
+        pos = self.pos(market_id)
+        sgn = 1 if side == Side.BUY else -1
+        if self.no_shares:
+            close = min(qty, -pos) if sgn > 0 else min(qty, pos)
+            close = max(close, 0.0)
+            opn = qty - close
+            if sgn > 0:   # buy YES: sells NO back at 1 - price, then buys YES
+                self.cash += close * (1 - price) - opn * price
+            else:         # sell YES: sells YES at price, then buys NO at 1 - price
+                self.cash += close * price - opn * (1 - price)
+        else:
+            self.cash -= sgn * qty * price
+        self.positions[market_id] = pos + sgn * qty
 
 
 @dataclass

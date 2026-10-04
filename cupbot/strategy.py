@@ -26,7 +26,7 @@ from .fairvalue import FairQuote
 from .mathutil import kelly_no, kelly_yes
 from .types import Account, BookMap, Market, OrderKind, OrderRequest, Side, TimeInForce
 
-TICK = 0.01
+TICK = 0.005   # the Cup tick (was 0.01, which skipped every half-cent price)
 MIN_QTY = 1.0
 
 
