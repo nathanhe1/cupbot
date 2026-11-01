@@ -1,4 +1,4 @@
-# cupbot: a Predictions Cup trading bot
+# cupbot
 
 A trading bot for the Susquehanna Predictions Cup (2026 US midterms, trading Oct 1 noon ET to Nov 4 noon ET).
 It follows the project's Game Plan and Edge Playbook: a rule-based engine with hard risk limits on the order path,
