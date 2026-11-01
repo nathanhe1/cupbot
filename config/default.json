@@ -8,15 +8,36 @@
     "enabled": false
   },
   "risk": {
-    "max_orders_per_minute": 25,
-    "max_gross_frac": 0.3
+    "_comment": "Oct 4: Johnny asked for a riskier strategy aimed at the top 3 (bar ~8.5x). Caps back to the code defaults or above; the drawdown halt stays as the wipeout guard at 50% in 24 h.",
+    "max_orders_per_minute": 60,
+    "max_gross_frac": 1.5,
+    "max_net_d_frac": 1.5,
+    "max_order_notional": 25000,
+    "daily_loss_halt_frac": 0.5
   },
   "strategy": {
-    "_comment": "Oct 1: quarter caps for the first live day. Kelly 0.5, min_edge 0.05, min_roc 0.05 chosen from sims calibrated to the real Cup (MM within ~1 pt of anchors): break-even if the Cup never lags, same profit as before if it does, far smaller worst case. Lag trades still use lag_min_edge.",
-    "max_order_frac": 0.0125,
-    "max_market_frac": 0.05,
-    "kelly_mult": 0.5,
-    "min_edge": 0.05,
-    "min_roc": 0.05
+    "_comment": "Oct 4 top-3 mode: 1.5x Kelly before the tournament sizer scales it (up to 3x more while far below the bar), 3-point edge, 25% per market.",
+    "max_order_frac": 0.05,
+    "max_market_frac": 0.25,
+    "kelly_mult": 1.5,
+    "min_edge": 0.03,
+    "min_roc": 0.03,
+    "final_week_kelly_mult": 2.0,
+    "final_week_max_market_frac": 0.3,
+    "night_kelly_mult": 2.0,
+    "night_max_market_frac": 0.35
+  },
+  "ladder": {
+    "offsets": [0.02, 0.045],
+    "total_frac": 1.0,
+    "max_pos_frac": 0.1
+  },
+  "tournament": {
+    "_comment": "Size for P(finish >= top-3 bar) from now, not only the final week. Bar from the Oct 4 leaderboard: 3rd place +744k.",
+    "phases": ["pre", "final_week", "night"],
+    "field_model": false,
+    "target_multiple": 8.5,
+    "basket_days_before": 10.0,
+    "basket_max_frac": 0.75
   }
 }

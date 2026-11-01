@@ -42,6 +42,7 @@ class StrategyConfig:
     recycle_price: float = 0.95      # election night: sell called winners at or above this bid
     recycle_min_alt_edge: float = 0.05  # ...if a better use of the cash exists
     combo_arb_margin: float = 0.02   # mutually exclusive sets: trade if prices sum off 1 by this
+    trim_mult: float = 0.0           # >0: sell positions worth more than this x the market cap down to the cap
     passive_quotes: bool = False     # rest limit orders around fair value (base building)
     passive_edge: float = 0.03
     passive_frac: float = 0.01

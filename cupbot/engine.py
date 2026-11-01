@@ -352,6 +352,9 @@ class Engine:
                 self.journal.log("dry_order", {"market": o.market_id, "side": o.side.value, "qty": o.qty,
                                                "price": o.price, "reason": o.reason})
                 continue
+            if getattr(acct, "no_shares", False) and _opening_cost(o, acct) > acct.cash + 1e-6:
+                self.stats.orders_blocked += 1
+                continue   # the venue would reject it for balance; don't spend a write finding out
             res = await self.ex.place_order(o)
             self.stats.orders_sent += 1
             if res.status == OrderStatus.UNKNOWN:
@@ -390,6 +393,7 @@ class Engine:
         allowance = self.cfg.risk.max_orders_per_minute - recent - self.cfg.ladder.orders_reserve
         sent: Dict[str, list] = {}
         reqs: List[OrderRequest] = []
+        cash_left = acct.cash   # resting orders may reserve balance: never queue more than we have
         for m in chosen:
             if not self.dry_run:
                 try:
@@ -402,9 +406,11 @@ class Engine:
                 if allowance <= 0:
                     break
                 ok, why = self.risk.check(o, acct, books.get(m), marks, equity, now)
-                if not ok:
+                cost = _opening_cost(o, acct) if getattr(acct, "no_shares", False) else 0.0
+                if not ok or cost > cash_left + 1e-6:
                     self.stats.orders_blocked += 1
                     continue
+                cash_left -= cost
                 allowance -= 1
                 reqs.append(o)
                 sent[m].append(("buy" if o.side == Side.BUY else "sell", o.price, int(o.qty)))
@@ -456,6 +462,14 @@ class Engine:
     def poke(self) -> None:
         if self.wake is not None:
             self.wake.set()
+
+
+def _opening_cost(o: OrderRequest, acct: Account) -> float:
+    """Cash the venue needs for the part of `o` that opens or grows a position."""
+    pos = acct.pos(o.market_id)
+    if o.side == Side.BUY:
+        return max(0.0, o.qty - max(-pos, 0.0)) * o.price
+    return max(0.0, o.qty - max(pos, 0.0)) * (1 - o.price)
 
 
 def _has_loop() -> bool:

@@ -105,6 +105,20 @@ class Strategy:
             ask, bid = book.best_ask, book.best_bid
             max_order = c.max_order_frac * equity
 
+            # 0. trim: a position well over today's per-market cap (built under older, bigger
+            #    caps) is sold down at the touch, so the cash goes back to short-term trading
+            if c.trim_mult > 0 and pos and (bid if pos > 0 else ask) is not None:
+                px = bid if pos > 0 else ask
+                unit = px if pos > 0 else 1 - px
+                cap = mfrac * equity
+                if abs(pos) * unit > cap * c.trim_mult and unit > 0:
+                    side = Side.SELL if pos > 0 else Side.BUY
+                    q = min((abs(pos) * unit - cap) / unit, book.depth_to(side, px), max_order / unit)
+                    if q >= MIN_QTY:
+                        orders.append(OrderRequest(mid, side, math.floor(q), px,
+                                                   reason=f"trim: {abs(pos):.0f} held, cap {cap:,.0f}"))
+                        continue
+
             # 1a. buy YES
             if ask is not None and fq.p - ask >= thr - 1e-9:
                 # also demand min_roc return on the capital tied up: limit <= fair / (1 + min_roc)
